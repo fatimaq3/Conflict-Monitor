@@ -231,7 +231,7 @@
       </table>
       <div class="empty" id="empty-msg" style="display:none;">
         <i class="ti ti-inbox"></i>
-        ما فيه مقالات مطابقة — جربي فلتر ثاني أو ارفعي بيانات جديدة
+        لا توجد مقالات مطابقة، يُرجى تجربة فلتر آخر أو رفع بيانات جديدة
       </div>
     </div>
   </div>
@@ -239,10 +239,8 @@
 </div>
 
 <script>
-  // ================= إعدادات Supabase =================
   const SUPABASE_URL = 'https://tkmatxmnmphmuykhywtv.supabase.co';
   const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRrbWF0eG1ubXBobXV5a2h5d3R2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA0MDM1NDgsImV4cCI6MjA5NTk3OTU0OH0.NUwIIhKfqILel1a12HL2NYS-R-iky0E2U7o9tlgtKac';
-  // =======================================================
 
   const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
@@ -277,7 +275,7 @@
     if(error){
       console.error(error);
       document.getElementById('empty-msg').style.display = 'block';
-      document.getElementById('empty-msg').textContent = 'صار خطأ بجلب البيانات — تأكدي من إعدادات Supabase';
+      document.getElementById('empty-msg').textContent = 'حدث خطأ في جلب البيانات، يُرجى التأكد من إعدادات Supabase';
       return;
     }
     articles = data || [];
@@ -332,7 +330,7 @@
     if(!rows.length){
       tbody.innerHTML = '';
       emptyMsg.style.display = 'block';
-      emptyMsg.innerHTML = '<i class="ti ti-inbox"></i>ما فيه مقالات مطابقة — جربي فلتر ثاني أو ارفعي بيانات جديدة';
+      emptyMsg.innerHTML = '<i class="ti ti-inbox"></i>لا توجد مقالات مطابقة، يُرجى تجربة فلتر آخر أو رفع بيانات جديدة';
       return;
     }
     emptyMsg.style.display = 'none';
@@ -456,14 +454,14 @@
 
       if(!toInsert.length){
         statusEl.style.color = 'var(--maroon)';
-        statusEl.textContent = 'ما لقيت صفوف صحيحة — تأكدي من ترتيب الأعمدة وصيغة الفئة';
+        statusEl.textContent = 'لم يتم العثور على صفوف صحيحة، يُرجى التأكد من ترتيب الأعمدة وصيغة الفئة';
         return;
       }
 
       var { error } = await sb.from('raw_articles').insert(toInsert);
       if(error){
         statusEl.style.color = 'var(--maroon)';
-        statusEl.textContent = 'صار خطأ بالرفع: ' + error.message;
+        statusEl.textContent = 'حدث خطأ أثناء الرفع: ' + error.message;
         return;
       }
 
@@ -474,7 +472,7 @@
     }catch(err){
       console.error(err);
       statusEl.style.color = 'var(--maroon)';
-      statusEl.textContent = 'صار خطأ بقراءة الملف — تأكدي إنه ملف إكسل صحيح';
+      statusEl.textContent = 'حدث خطأ أثناء قراءة الملف، يُرجى التأكد من أنه ملف إكسل صحيح';
     }
   }
 
