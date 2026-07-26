@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Conflict Monitor — سجل البيانات الخام اليومي</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2/dist/tabler-icons.min.css">
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --green:#286140;
+    --green-dark:#1c4a30;
+    --gold:#B58500;
+    --navy:#1B365D;
+    --brown:#6E6259;
+    --teal:#6BCABA;
+    --maroon:#952E46;
+    --gray:#C7C8CA;
+    --white:#FFFFFF;
+    --soft-white:#F2F2F2;
+    --black:#5A5959;
+    --soft-black:#707070;
+    --bg:#F3EFE4;
+    --card:#FFFFFF;
+    --border:#E4DFD0;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);font-family:'Segoe UI','Tahoma',Arial,sans-serif;color:var(--black);}
+  .topbar{
+    background:var(--green);
+    color:var(--white);
+    padding:18px 32px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+  }
+  .topbar h1{margin:0;font-size:22px;font-weight:600;letter-spacing:.2px;}
+  .topbar .badge-day{
+    background:rgba(255,255,255,.15);
+    border-radius:20px;
+    padding:6px 16px;
+    font-size:13px;
+    display:flex;
+    align-items:center;
+    gap:6px;
+  }
+
+  .wrap{max-width:1100px;margin:0 auto;padding:24px 20px 60px;}
+
+  .stats{
+    display:grid;
+    grid-template-columns:repeat(4,1fr);
+    gap:14px;
+    margin-bottom:24px;
+  }
+  .stat{
+    background:var(--card);
+    border:1px solid var(--border);
+    border-radius:14px;
+    padding:16px;
+    text-align:center;
+  }
+  .stat .n{font-size:26px;font-weight:700;color:var(--navy);}
+  .stat .l{font-size:12.5px;color:var(--soft-black);margin-top:4px;}
+  .stat.used .n{color:var(--green);}
+  .stat.cat1 .n{color:var(--maroon);}
+  .stat.cat2 .n{color:var(--teal);}
+
+  .card{
+    background:var(--card);
+    border:1px solid var(--border);
+    border-radius:14px;
+    padding:20px;
+    margin-bottom:20px;
+  }
+  .card h2{
+    font-size:15px;
+    font-weight:600;
+    color:var(--green);
+    margin:0 0 14px;
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  .card h2 i{font-size:18px;color:var(--gold);}
+
+  .dropzone{
+    border:2px dashed var(--gray);
+    border-radius:12px;
+    padding:26px;
+    text-align:center;
+    color:var(--soft-black);
+    cursor:pointer;
+    transition:border-color .15s, background .15s;
+  }
+  .dropzone.drag{border-color:var(--green);background:var(--soft-white);}
+  .dropzone i{font-size:26px;color:var(--gold);display:block;margin-bottom:6px;}
+  .dropzone .hint{font-size:11.5px;color:var(--gray);margin-top:6px;}
+  #file-input{display:none;}
+  .upload-status{font-size:12.5px;margin-top:10px;min-height:16px;}
+
+  .filter-row{
+    display:flex;
+    gap:12px;
+    flex-wrap:wrap;
+    align-items:flex-end;
+  }
+  .field{display:flex;flex-direction:column;gap:4px;}
+  .field label{font-size:11.5px;color:var(--soft-black);}
+  input[type=date],select,input[type=text]{
+    padding:9px 12px;
+    border:1px solid var(--border);
+    border-radius:9px;
+    font-size:13px;
+    font-family:inherit;
+    background:#fff;
+    color:var(--black);
+  }
+  input:focus,select:focus{outline:none;border-color:var(--green);}
+  .btn{
+    border:none;
+    border-radius:9px;
+    padding:9px 18px;
+    font-size:13px;
+    font-weight:600;
+    cursor:pointer;
+    font-family:inherit;
+  }
+  .btn-primary{background:var(--green);color:#fff;}
+  .btn-primary:hover{background:var(--green-dark);}
+  .btn-ghost{background:transparent;color:var(--soft-black);border:1px solid var(--border);}
+  .btn-ghost:hover{background:var(--soft-white);}
+
+  table{width:100%;border-collapse:collapse;font-size:12.5px;}
+  thead th{
+    background:var(--soft-white);
+    color:var(--soft-black);
+    font-weight:600;
+    text-align:right;
+    padding:9px 10px;
+    border-bottom:1px solid var(--border);
+    white-space:nowrap;
+  }
+  tbody td{padding:9px 10px;border-bottom:1px solid var(--border);vertical-align:top;}
+  tbody tr.used td{color:#B4B0A6;}
+  tbody tr.used .title-text{text-decoration:line-through;text-decoration-color:#D6D2C6;}
+  tbody tr:hover{background:#FCFBF8;}
+
+  .badge{
+    display:inline-block;
+    padding:3px 11px;
+    border-radius:20px;
+    font-size:11px;
+    font-weight:700;
+    white-space:nowrap;
+  }
+  .badge.cat-تداعيات{background:#F5E5E9;color:var(--maroon);}
+  .badge.cat-سيناريوهات{background:#E2F5F1;color:#2E7A6D;}
+
+  .title-cell{max-width:260px;}
+  .title-text{font-weight:600;color:var(--black);}
+  .summary-text{font-size:11.5px;color:var(--soft-black);margin-top:3px;}
+  a.article-link{color:var(--green);text-decoration:none;font-size:11.5px;display:inline-flex;align-items:center;gap:3px;}
+  a.article-link:hover{text-decoration:underline;}
+
+  input[type=checkbox]{width:19px;height:19px;accent-color:var(--green);cursor:pointer;}
+  .usedby-select{font-size:11.5px;padding:5px 7px;width:100%;}
+
+  .empty{text-align:center;padding:34px 10px;color:var(--soft-black);font-size:13px;}
+  .empty i{font-size:26px;color:var(--gray);display:block;margin-bottom:8px;}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <h1>سجل البيانات الخام اليومي</h1>
+  <div class="badge-day" id="today-badge"><i class="ti ti-calendar"></i><span></span></div>
+</div>
+
+<div class="wrap">
+
+  <div class="stats" id="stats"></div>
+
+  <div class="card">
+    <h2><i class="ti ti-upload"></i>رفع بيانات اليوم</h2>
+    <div class="dropzone" id="dropzone">
+      <i class="ti ti-file-spreadsheet"></i>
+      اسحبي ملف الإكسل هنا أو اضغطي للاختيار
+      <div class="hint">ترتيب الأعمدة: التاريخ (2026/07/26) — الفئة (تداعيات / سيناريوهات) — العنوان — الرابط — ملخص عام</div>
+    </div>
+    <input type="file" id="file-input" accept=".xlsx,.xls">
+    <div class="upload-status" id="upload-status"></div>
+  </div>
+
+  <div class="card">
+    <h2><i class="ti ti-filter"></i>عرض حسب اليوم والفئة</h2>
+    <div class="filter-row">
+      <div class="field">
+        <label>التاريخ</label>
+        <input type="date" id="f-date">
+      </div>
+      <div class="field">
+        <label>الفئة</label>
+        <select id="f-category">
+          <option value="">كل الفئات</option>
+          <option value="تداعيات">تداعيات الحرب الإيرانية إقليميًا ودوليًا</option>
+          <option value="سيناريوهات">أبرز السيناريوهات والمقترحات</option>
+        </select>
+      </div>
+      <div class="field">
+        <button class="btn btn-ghost" id="btn-clear">مسح الفلتر</button>
+      </div>
+      <div class="field" style="margin-right:auto;">
+        <button class="btn btn-ghost" id="btn-refresh"><i class="ti ti-refresh"></i></button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2><i class="ti ti-list"></i>المقالات</h2>
+    <div style="overflow-x:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>التاريخ</th>
+            <th>الفئة</th>
+            <th>العنوان</th>
+            <th style="text-align:center;">استُخدمت؟</th>
+            <th>من</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+      <div class="empty" id="empty-msg" style="display:none;">
+        <i class="ti ti-inbox"></i>
+        ما فيه مقالات مطابقة — جربي فلتر ثاني أو ارفعي بيانات جديدة
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  // ================= إعدادات Supabase =================
+  // عدّلي القيمتين هذي بعد ما تنشئين مشروع Supabase (راجعي دليل SETUP.md)
+  const SUPABASE_URL = 'YOUR_SUPABASE_URL';
+  const SUPABASE_ANON_KEY = 'YOUR_SUPABASE_ANON_KEY';
+  // =======================================================
+
+  const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  let articles = [];
+
+  function escapeHtml(s){
+    return String(s || '').replace(/[&<>"']/g, function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+  }
+
+  function formatDateDisplay(iso){
+    if(!iso) return '';
+    var parts = iso.split('-');
+    if(parts.length !== 3) return iso;
+    return parts[0] + '/' + parts[1] + '/' + parts[2];
+  }
+
+  function todayISO(){
+    var d = new Date();
+    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+  }
+
+  document.querySelector('#today-badge span').textContent = formatDateDisplay(todayISO());
+
+  async function loadArticles(){
+    const { data, error } = await supabase
+      .from('raw_articles')
+      .select('*')
+      .order('article_date', { ascending: false })
+      .order('created_at', { ascending: false });
+    if(error){
+      console.error(error);
+      document.getElementById('empty-msg').style.display = 'block';
+      document.getElementById('empty-msg').textContent = 'صار خطأ بجلب البيانات — تأكدي من إعدادات Supabase';
+      return;
+    }
+    articles = data || [];
+    render();
+  }
+
+  function renderStats(){
+    var total = articles.length;
+    var used = articles.filter(function(a){ return a.used; }).length;
+    var cat1 = articles.filter(function(a){ return a.category === 'تداعيات'; }).length;
+    var cat2 = articles.filter(function(a){ return a.category === 'سيناريوهات'; }).length;
+    var stats = document.getElementById('stats');
+    stats.innerHTML =
+      '<div class="stat"><div class="n">'+total+'</div><div class="l">إجمالي المقالات</div></div>'+
+      '<div class="stat used"><div class="n">'+used+'</div><div class="l">استُخدمت</div></div>'+
+      '<div class="stat cat1"><div class="n">'+cat1+'</div><div class="l">تداعيات الحرب</div></div>'+
+      '<div class="stat cat2"><div class="n">'+cat2+'</div><div class="l">سيناريوهات ومقترحات</div></div>';
+  }
+
+  function getFiltered(){
+    var date = document.getElementById('f-date').value;
+    var cat = document.getElementById('f-category').value;
+    return articles.filter(function(a){
+      if(date && a.article_date !== date) return false;
+      if(cat && a.category !== cat) return false;
+      return true;
+    });
+  }
+
+  function renderTable(){
+    var rows = getFiltered();
+    var tbody = document.getElementById('tbody');
+    var emptyMsg = document.getElementById('empty-msg');
+    if(!rows.length){
+      tbody.innerHTML = '';
+      emptyMsg.style.display = 'block';
+      emptyMsg.innerHTML = '<i class="ti ti-inbox"></i>ما فيه مقالات مطابقة — جربي فلتر ثاني أو ارفعي بيانات جديدة';
+      return;
+    }
+    emptyMsg.style.display = 'none';
+    tbody.innerHTML = rows.map(function(a){
+      var linkHtml = a.link ? '<div><a class="article-link" href="'+escapeHtml(a.link)+'" target="_blank" rel="noopener"><i class="ti ti-external-link"></i>فتح الرابط</a></div>' : '';
+      var teamOptions = ['','فاطمة','عضو 2','عضو 3'].map(function(m){
+        var label = m === '' ? '—' : m;
+        return '<option value="'+escapeHtml(m)+'"'+(a.used_by===m?' selected':'')+'>'+escapeHtml(label)+'</option>';
+      }).join('');
+      return '<tr class="'+(a.used?'used':'')+'" data-id="'+a.id+'">'+
+        '<td>'+formatDateDisplay(a.article_date)+'</td>'+
+        '<td><span class="badge cat-'+escapeHtml(a.category)+'">'+escapeHtml(a.category)+'</span></td>'+
+        '<td class="title-cell">'+
+          '<div class="title-text">'+escapeHtml(a.title)+'</div>'+
+          (a.summary ? '<div class="summary-text">'+escapeHtml(a.summary)+'</div>' : '')+
+          linkHtml+
+        '</td>'+
+        '<td><div style="display:flex;justify-content:center;"><input type="checkbox" class="used-check" data-id="'+a.id+'" '+(a.used?'checked':'')+'></div></td>'+
+        '<td><select class="usedby-select used-by-select" data-id="'+a.id+'" '+(a.used?'':'disabled')+'>'+teamOptions+'</select></td>'+
+      '</tr>';
+    }).join('');
+
+    Array.prototype.forEach.call(document.querySelectorAll('.used-check'), function(cb){
+      cb.onchange = async function(){
+        var id = cb.dataset.id;
+        var art = articles.find(function(x){ return String(x.id) === String(id); });
+        if(!art) return;
+        art.used = cb.checked;
+        if(!cb.checked) art.used_by = null;
+        await supabase.from('raw_articles').update({ used: art.used, used_by: art.used_by }).eq('id', id);
+        render();
+      };
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('.used-by-select'), function(sel){
+      sel.onchange = async function(){
+        var id = sel.dataset.id;
+        var art = articles.find(function(x){ return String(x.id) === String(id); });
+        if(!art) return;
+        art.used_by = sel.value || null;
+        await supabase.from('raw_articles').update({ used_by: art.used_by }).eq('id', id);
+      };
+    });
+  }
+
+  function render(){
+    renderStats();
+    renderTable();
+  }
+
+  document.getElementById('f-date').onchange = renderTable;
+  document.getElementById('f-category').onchange = renderTable;
+  document.getElementById('btn-clear').onclick = function(){
+    document.getElementById('f-date').value = '';
+    document.getElementById('f-category').value = '';
+    renderTable();
+  };
+  document.getElementById('btn-refresh').onclick = loadArticles;
+
+  // ================= رفع الإكسل =================
+  var dropzone = document.getElementById('dropzone');
+  var fileInput = document.getElementById('file-input');
+  var statusEl = document.getElementById('upload-status');
+
+  dropzone.onclick = function(){ fileInput.click(); };
+  dropzone.ondragover = function(e){ e.preventDefault(); dropzone.classList.add('drag'); };
+  dropzone.ondragleave = function(){ dropzone.classList.remove('drag'); };
+  dropzone.ondrop = function(e){
+    e.preventDefault();
+    dropzone.classList.remove('drag');
+    if(e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+  };
+  fileInput.onchange = function(){
+    if(fileInput.files.length) handleFile(fileInput.files[0]);
+  };
+
+  function excelDateToISO(val){
+    if(typeof val === 'number'){
+      var d = XLSX.SSF.parse_date_code(val);
+      return d.y + '-' + String(d.m).padStart(2,'0') + '-' + String(d.d).padStart(2,'0');
+    }
+    var s = String(val || '').trim();
+    var m = s.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
+    if(m) return m[1] + '-' + m[2].padStart(2,'0') + '-' + m[3].padStart(2,'0');
+    return null;
+  }
+
+  function normalizeCategory(val){
+    var s = String(val || '').trim();
+    if(s.indexOf('تداعيات') !== -1) return 'تداعيات';
+    if(s.indexOf('سيناريو') !== -1) return 'سيناريوهات';
+    return null;
+  }
+
+  async function handleFile(file){
+    statusEl.style.color = 'var(--soft-black)';
+    statusEl.textContent = 'جاري القراءة...';
+    try{
+      var buf = await file.arrayBuffer();
+      var wb = XLSX.read(buf, { type: 'array', cellDates: false });
+      var sheet = wb.Sheets[wb.SheetNames[0]];
+      var rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+
+      var startIdx = 0;
+      if(rows.length && String(rows[0][0]).indexOf('تاريخ') !== -1) startIdx = 1;
+
+      var toInsert = [];
+      var skipped = 0;
+      for(var i = startIdx; i < rows.length; i++){
+        var r = rows[i];
+        if(!r || !r.length) continue;
+        var dateISO = excelDateToISO(r[0]);
+        var category = normalizeCategory(r[1]);
+        var title = String(r[2] || '').trim();
+        var link = String(r[3] || '').trim();
+        var summary = String(r[4] || '').trim();
+        if(!dateISO || !category || !title){ if(title || category){ skipped++; } continue; }
+        toInsert.push({
+          article_date: dateISO,
+          category: category,
+          title: title,
+          link: link || null,
+          summary: summary || null,
+          used: false
+        });
+      }
+
+      if(!toInsert.length){
+        statusEl.style.color = 'var(--maroon)';
+        statusEl.textContent = 'ما لقيت صفوف صحيحة — تأكدي من ترتيب الأعمدة وصيغة الفئة';
+        return;
+      }
+
+      var { error } = await supabase.from('raw_articles').insert(toInsert);
+      if(error){
+        statusEl.style.color = 'var(--maroon)';
+        statusEl.textContent = 'صار خطأ بالرفع: ' + error.message;
+        return;
+      }
+
+      statusEl.style.color = 'var(--green)';
+      statusEl.textContent = 'تم رفع ' + toInsert.length + ' صف بنجاح' + (skipped ? (' — تم تجاهل ' + skipped + ' صف ناقص') : '');
+      fileInput.value = '';
+      loadArticles();
+    }catch(err){
+      console.error(err);
+      statusEl.style.color = 'var(--maroon)';
+      statusEl.textContent = 'صار خطأ بقراءة الملف — تأكدي إنه ملف إكسل صحيح';
+    }
+  }
+
+  loadArticles();
+  setInterval(loadArticles, 20000);
+</script>
+</body>
+</html>
