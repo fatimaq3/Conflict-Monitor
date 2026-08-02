@@ -191,11 +191,11 @@
   </div>
 
   <div class="card">
-    <h2><i class="ti ti-filter"></i>عرض حسب اليوم والفئة</h2>
+    <h2><i class="ti ti-filter"></i>عرض حسب الأسبوع والفئة</h2>
     <div class="filter-row">
       <div class="field">
-        <label>التاريخ</label>
-        <input type="date" id="f-date">
+        <label>الأسبوع</label>
+        <select id="f-week"></select>
       </div>
       <div class="field">
         <label>الفئة</label>
@@ -266,6 +266,45 @@
 
   document.querySelector('#today-badge span').textContent = formatDateDisplay(todayISO());
 
+  var WEEK_ANCHOR = '2026-07-25';
+  var WEEK_COUNT = 5;
+
+  function addDaysISO(iso, days){
+    var parts = iso.split('-').map(Number);
+    var d = new Date(Date.UTC(parts[0], parts[1]-1, parts[2]));
+    d.setUTCDate(d.getUTCDate() + days);
+    return d.getUTCFullYear() + '-' + String(d.getUTCMonth()+1).padStart(2,'0') + '-' + String(d.getUTCDate()).padStart(2,'0');
+  }
+
+  function formatEnLabel(iso){
+    var parts = iso.split('-').map(Number);
+    var d = new Date(Date.UTC(parts[0], parts[1]-1, parts[2]));
+    return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'UTC' });
+  }
+
+  function buildWeeks(){
+    var weeks = [];
+    var start = WEEK_ANCHOR;
+    for(var i = 0; i < WEEK_COUNT; i++){
+      var end = addDaysISO(start, 7);
+      weeks.push({ start: start, end: end, label: formatEnLabel(start) + ' - ' + formatEnLabel(end) });
+      start = end;
+    }
+    return weeks;
+  }
+
+  var WEEKS = buildWeeks();
+
+  function fillWeekSelect(){
+    var sel = document.getElementById('f-week');
+    var opts = ['<option value="">الكل</option>'];
+    WEEKS.forEach(function(w, i){
+      opts.push('<option value="'+i+'">'+w.label+'</option>');
+    });
+    sel.innerHTML = opts.join('');
+  }
+  fillWeekSelect();
+
   async function loadArticles(){
     const { data, error } = await sb
       .from('raw_articles')
@@ -282,11 +321,11 @@
     render();
   }
 
-  function renderStats(){
-    var total = articles.length;
-    var used = articles.filter(function(a){ return a.used; }).length;
-    var cat1 = articles.filter(function(a){ return a.category === 'تداعيات'; }).length;
-    var cat2 = articles.filter(function(a){ return a.category === 'سيناريوهات'; }).length;
+  function renderStats(rows){
+    var total = rows.length;
+    var used = rows.filter(function(a){ return a.used; }).length;
+    var cat1 = rows.filter(function(a){ return a.category === 'تداعيات'; }).length;
+    var cat2 = rows.filter(function(a){ return a.category === 'سيناريوهات'; }).length;
     var stats = document.getElementById('stats');
     stats.innerHTML =
       '<div class="stat"><div class="n">'+total+'</div><div class="l">إجمالي المقالات</div></div>'+
@@ -298,10 +337,13 @@
   let dateSortOrder = 'desc';
 
   function getFiltered(){
-    var date = document.getElementById('f-date').value;
+    var weekIdx = document.getElementById('f-week').value;
     var cat = document.getElementById('f-category').value;
     var rows = articles.filter(function(a){
-      if(date && a.article_date !== date) return false;
+      if(weekIdx !== ''){
+        var w = WEEKS[Number(weekIdx)];
+        if(!(a.article_date >= w.start && a.article_date <= w.end)) return false;
+      }
       if(cat && a.category !== cat) return false;
       return true;
     });
@@ -320,11 +362,10 @@
     dateSortOrder = dateSortOrder === 'desc' ? 'asc' : 'desc';
     var icon = document.getElementById('date-sort-icon');
     icon.className = dateSortOrder === 'desc' ? 'ti ti-arrow-down' : 'ti ti-arrow-up';
-    renderTable();
+    renderTable(getFiltered());
   };
 
-  function renderTable(){
-    var rows = getFiltered();
+  function renderTable(rows){
     var tbody = document.getElementById('tbody');
     var emptyMsg = document.getElementById('empty-msg');
     if(!rows.length){
@@ -371,16 +412,17 @@
   }
 
   function render(){
-    renderStats();
-    renderTable();
+    var rows = getFiltered();
+    renderStats(rows);
+    renderTable(rows);
   }
 
-  document.getElementById('f-date').onchange = renderTable;
-  document.getElementById('f-category').onchange = renderTable;
+  document.getElementById('f-week').onchange = render;
+  document.getElementById('f-category').onchange = render;
   document.getElementById('btn-clear').onclick = function(){
-    document.getElementById('f-date').value = '';
+    document.getElementById('f-week').value = '';
     document.getElementById('f-category').value = '';
-    renderTable();
+    render();
   };
   document.getElementById('btn-refresh').onclick = loadArticles;
 
