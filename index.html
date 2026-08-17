@@ -8,6 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@500;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css">
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   :root{
@@ -290,7 +291,7 @@
         <option value="">كل الفئات</option>
         <option value="تداعيات">تداعيات</option>
         <option value="سيناريوهات">سيناريوهات</option>
-        <option value="حلول">حلول</option>
+        <option value="مقترحات">مقترحات</option>
         <option value="اقتصادي">اقتصادي</option>
         <option value="مراكز الأبحاث">مراكز الأبحاث</option>
       </select>
@@ -340,11 +341,11 @@
 
   let articles = [];
 
-  var CATEGORY_LIST = ['تداعيات','سيناريوهات','حلول','اقتصادي','مراكز الأبحاث'];
+  var CATEGORY_LIST = ['تداعيات','سيناريوهات','مقترحات','اقتصادي','مراكز الأبحاث'];
   var CATEGORY_STYLES = {
     'تداعيات': {bg:'#F5E5E9', color:'#952E46'},
     'سيناريوهات': {bg:'#E2F5F1', color:'#2E7A6D'},
-    'حلول': {bg:'#E8F0EA', color:'#1c4a30'},
+    'مقترحات': {bg:'#E8F0EA', color:'#1c4a30'},
     'اقتصادي': {bg:'#FBF1DC', color:'#7A5F00'},
     'مراكز الأبحاث': {bg:'#E7EAF2', color:'#1B365D'}
   };
@@ -627,12 +628,47 @@
     });
   }
 
-  document.getElementById('export-excel').onclick = function(){
+  document.getElementById('export-excel').onclick = async function(){
     var rows = exportRows();
-    var ws = XLSX.utils.json_to_sheet(rows);
-    var wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'عين');
-    XLSX.writeFile(wb, 'عين-تصدير.xlsx');
+    var headers = ['التاريخ','الفئة','العنوان','المصدر','الرابط','ملخص عام','تمت المراجعة','استخدمها'];
+    var widths = [13, 15, 42, 18, 28, 42, 14, 22];
+
+    var wb = new ExcelJS.Workbook();
+    var ws = wb.addWorksheet('بيانات عين', { views: [{ rightToLeft: true, state: 'frozen', ySplit: 1 }] });
+
+    ws.columns = headers.map(function(h, i){ return { header: h, key: h, width: widths[i] }; });
+
+    var headerRow = ws.getRow(1);
+    headerRow.eachCell(function(cell){
+      cell.font = { name: 'Arial', bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF916E2C' } };
+      cell.alignment = { horizontal: 'center', vertical: 'middle' };
+    });
+    headerRow.height = 22;
+
+    rows.forEach(function(r, idx){
+      var row = ws.addRow(headers.map(function(h){ return r[h]; }));
+      row.eachCell(function(cell){
+        cell.alignment = { horizontal: 'right', vertical: 'middle', wrapText: true };
+        cell.font = { name: 'Arial', size: 10.5 };
+      });
+      if((idx + 1) % 2 === 0){
+        row.eachCell(function(cell){
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF7F5EF' } };
+        });
+      }
+    });
+
+    var buffer = await wb.xlsx.writeBuffer();
+    var blob = new Blob([buffer], { type: 'application/octet-stream' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'عين-تصدير.xlsx';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
     closeAllPopovers(null);
   };
 
@@ -775,7 +811,7 @@
     var s = String(val || '').trim();
     if(s.indexOf('تداعيات') !== -1) return 'تداعيات';
     if(s.indexOf('سيناريو') !== -1) return 'سيناريوهات';
-    if(s.indexOf('حلول') !== -1 || s.indexOf('حل') !== -1) return 'حلول';
+    if(s.indexOf('مقترحات') !== -1 || s.indexOf('حلول') !== -1 || s.indexOf('حل') !== -1) return 'مقترحات';
     if(s.indexOf('اقتصاد') !== -1) return 'اقتصادي';
     if(s.indexOf('مراكز') !== -1 || s.indexOf('أبحاث') !== -1 || s.indexOf('ابحاث') !== -1) return 'مراكز الأبحاث';
     return null;
