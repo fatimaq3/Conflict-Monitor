@@ -683,7 +683,12 @@
     var catLabel = catVal || 'كل الفئات';
     var exportDate = formatDateDisplay(todayISO());
 
+    var reviewedCount = filteredRows.filter(function(a){ return a.reviewed; }).length;
+    var usedCount = filteredRows.filter(function(a){ return (a.used_by || []).length > 0; }).length;
+
     var statCards = '<div class="pdf-stat total"><div class="n">'+filteredRows.length+'</div><div class="l">إجمالي المقالات</div></div>' +
+      '<div class="pdf-stat" style="background:#E4EFE8;"><div class="n" style="color:#1c4a30;">'+reviewedCount+'</div><div class="l" style="color:#1c4a30;">تمت المراجعة</div></div>' +
+      '<div class="pdf-stat" style="background:#F2E7D2;"><div class="n" style="color:#785B22;">'+usedCount+'</div><div class="l" style="color:#785B22;">تم الاستخدام</div></div>' +
       CATEGORY_LIST.map(function(cat){
         var n = filteredRows.filter(function(a){ return a.category === cat; }).length;
         var style = CATEGORY_STYLES[cat];
