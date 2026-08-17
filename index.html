@@ -67,7 +67,19 @@
   }
   .stat .n{font-size:21px;font-weight:700;color:var(--navy);}
   .stat .l{font-size:11px;color:var(--soft-black);margin-top:3px;}
-  .stat.total .n{color:var(--black);}
+
+  .stat-hero{
+    background:linear-gradient(135deg, var(--bronze), var(--bronze-dark));
+    border-radius:14px;
+    padding:16px 20px;
+    margin-bottom:12px;
+    display:flex;
+    align-items:center;
+    gap:14px;
+  }
+  .stat-hero i{font-size:26px;color:#F2D9A8;}
+  .stat-hero .n{font-size:34px;font-weight:800;color:#fff;line-height:1;}
+  .stat-hero .l{font-size:13px;color:#F2E7D2;margin-top:2px;}
 
   .toolbar-card{
     background:var(--card);
@@ -221,14 +233,14 @@
   .used-popover{
     position:absolute;
     top:calc(100% + 6px);
-    right:0;
+    left:0;
     background:#fff;
     border:1px solid var(--border);
     border-radius:10px;
     box-shadow:0 6px 20px rgba(0,0,0,.14);
     padding:10px;
     z-index:30;
-    width:170px;
+    width:210px;
   }
   .used-chip{
     display:inline-flex;
@@ -258,6 +270,7 @@
 
 <div class="wrap">
 
+  <div class="stat-hero" id="stats-hero"></div>
   <div class="stats" id="stats"></div>
 
   <div class="toolbar-card">
@@ -279,7 +292,7 @@
         <option value="سيناريوهات">سيناريوهات</option>
         <option value="حلول">حلول</option>
         <option value="اقتصادي">اقتصادي</option>
-        <option value="مراكز أبحاث">مراكز أبحاث</option>
+        <option value="مراكز الأبحاث">مراكز الأبحاث</option>
       </select>
     </div>
 
@@ -327,13 +340,13 @@
 
   let articles = [];
 
-  var CATEGORY_LIST = ['تداعيات','سيناريوهات','حلول','اقتصادي','مراكز أبحاث'];
+  var CATEGORY_LIST = ['تداعيات','سيناريوهات','حلول','اقتصادي','مراكز الأبحاث'];
   var CATEGORY_STYLES = {
     'تداعيات': {bg:'#F5E5E9', color:'#952E46'},
     'سيناريوهات': {bg:'#E2F5F1', color:'#2E7A6D'},
     'حلول': {bg:'#E8F0EA', color:'#1c4a30'},
     'اقتصادي': {bg:'#FBF1DC', color:'#7A5F00'},
-    'مراكز أبحاث': {bg:'#E7EAF2', color:'#1B365D'}
+    'مراكز الأبحاث': {bg:'#E7EAF2', color:'#1B365D'}
   };
 
   function escapeHtml(s){
@@ -419,8 +432,11 @@
 
   function renderStats(rows){
     var total = rows.length;
+    var hero = document.getElementById('stats-hero');
+    hero.innerHTML = '<i class="ti ti-chart-bar"></i><div><div class="n">'+total+'</div><div class="l">إجمالي المقالات</div></div>';
+
     var stats = document.getElementById('stats');
-    var html = '<div class="stat total"><div class="n">'+total+'</div><div class="l">إجمالي المقالات</div></div>';
+    var html = '';
     CATEGORY_LIST.forEach(function(cat){
       var n = rows.filter(function(a){ return a.category === cat; }).length;
       var style = CATEGORY_STYLES[cat];
@@ -761,7 +777,7 @@
     if(s.indexOf('سيناريو') !== -1) return 'سيناريوهات';
     if(s.indexOf('حلول') !== -1 || s.indexOf('حل') !== -1) return 'حلول';
     if(s.indexOf('اقتصاد') !== -1) return 'اقتصادي';
-    if(s.indexOf('مراكز') !== -1 || s.indexOf('أبحاث') !== -1 || s.indexOf('ابحاث') !== -1) return 'مراكز أبحاث';
+    if(s.indexOf('مراكز') !== -1 || s.indexOf('أبحاث') !== -1 || s.indexOf('ابحاث') !== -1) return 'مراكز الأبحاث';
     return null;
   }
 
