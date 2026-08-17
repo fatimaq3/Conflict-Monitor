@@ -3,7 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Conflict Monitor — سجل البيانات الخام اليومي</title>
+<title>عين — Conflict Monitor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@500;700;800&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css">
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -12,6 +14,8 @@
     --green:#286140;
     --green-dark:#1c4a30;
     --gold:#B58500;
+    --bronze:#916E2C;
+    --bronze-dark:#785B22;
     --navy:#1B365D;
     --brown:#6E6259;
     --teal:#6BCABA;
@@ -26,16 +30,16 @@
     --border:#E4DFD0;
   }
   *{box-sizing:border-box;}
-  body{margin:0;background:var(--bg);font-family:'Segoe UI','Tahoma',Arial,sans-serif;color:var(--black);}
+  body{margin:0;background:var(--bg);font-family:'Cairo','Segoe UI',Tahoma,Arial,sans-serif;color:var(--black);}
   .topbar{
-    background:var(--green);
+    background:linear-gradient(135deg, var(--bronze), var(--bronze-dark));
     color:var(--white);
     padding:18px 32px;
     display:flex;
     align-items:center;
     justify-content:space-between;
   }
-  .topbar h1{margin:0;font-size:22px;font-weight:600;letter-spacing:.2px;}
+  .topbar h1{margin:0;font-size:32px;font-weight:800;letter-spacing:1.5px;}
   .topbar .badge-day{
     background:rgba(255,255,255,.15);
     border-radius:20px;
@@ -46,134 +50,209 @@
     gap:6px;
   }
 
-  .wrap{max-width:1100px;margin:0 auto;padding:24px 20px 60px;}
+  .wrap{max-width:1140px;margin:0 auto;padding:20px 20px 60px;}
 
   .stats{
     display:grid;
-    grid-template-columns:repeat(4,1fr);
-    gap:14px;
-    margin-bottom:24px;
+    grid-template-columns:repeat(auto-fit,minmax(110px,1fr));
+    gap:10px;
+    margin-bottom:18px;
   }
   .stat{
     background:var(--card);
     border:1px solid var(--border);
-    border-radius:14px;
-    padding:16px;
+    border-radius:12px;
+    padding:12px 8px;
     text-align:center;
   }
-  .stat .n{font-size:26px;font-weight:700;color:var(--navy);}
-  .stat .l{font-size:12.5px;color:var(--soft-black);margin-top:4px;}
-  .stat.used .n{color:var(--green);}
-  .stat.cat1 .n{color:var(--maroon);}
-  .stat.cat2 .n{color:var(--teal);}
+  .stat .n{font-size:21px;font-weight:700;color:var(--navy);}
+  .stat .l{font-size:11px;color:var(--soft-black);margin-top:3px;}
+  .stat.total .n{color:var(--black);}
+
+  .toolbar-card{
+    background:var(--card);
+    border:1px solid var(--border);
+    border-radius:12px;
+    padding:10px 14px;
+    margin-bottom:14px;
+    display:flex;
+    gap:10px;
+    flex-wrap:wrap;
+    align-items:center;
+  }
 
   .card{
     background:var(--card);
     border:1px solid var(--border);
     border-radius:14px;
-    padding:20px;
-    margin-bottom:20px;
+    padding:16px;
+    margin-bottom:16px;
   }
-  .card h2{
-    font-size:15px;
-    font-weight:600;
-    color:var(--green);
-    margin:0 0 14px;
-    display:flex;
-    align-items:center;
-    gap:8px;
-  }
-  .card h2 i{font-size:18px;color:var(--gold);}
 
   .dropzone{
-    border:2px dashed var(--gray);
-    border-radius:12px;
-    padding:26px;
-    text-align:center;
+    border:1.5px dashed var(--gray);
+    border-radius:10px;
+    padding:9px 16px;
+    display:inline-flex;
+    align-items:center;
+    gap:8px;
     color:var(--soft-black);
     cursor:pointer;
+    font-size:12.5px;
     transition:border-color .15s, background .15s;
   }
   .dropzone.drag{border-color:var(--green);background:var(--soft-white);}
-  .dropzone i{font-size:26px;color:var(--gold);display:block;margin-bottom:6px;}
-  .dropzone .hint{font-size:11.5px;color:var(--gray);margin-top:6px;}
+  .dropzone i{font-size:16px;color:var(--gold);}
   #file-input{display:none;}
-  .upload-status{font-size:12.5px;margin-top:10px;min-height:16px;}
+  .upload-status{font-size:11.5px;margin-top:6px;min-height:14px;}
 
-  .filter-row{
-    display:flex;
-    gap:12px;
-    flex-wrap:wrap;
-    align-items:flex-end;
-  }
-  .field{display:flex;flex-direction:column;gap:4px;}
-  .field label{font-size:11.5px;color:var(--soft-black);}
-  input[type=date],select,input[type=text]{
-    padding:9px 12px;
+  .field{display:flex;flex-direction:column;gap:3px;}
+  .field label{font-size:10.5px;color:var(--soft-black);}
+  select,input[type=text]{
+    padding:7px 10px;
     border:1px solid var(--border);
-    border-radius:9px;
-    font-size:13px;
+    border-radius:8px;
+    font-size:12.5px;
     font-family:inherit;
     background:#fff;
     color:var(--black);
   }
   input:focus,select:focus{outline:none;border-color:var(--green);}
+  .icon-btn{
+    border:1px solid var(--border);
+    background:#fff;
+    color:var(--soft-black);
+    border-radius:8px;
+    width:34px;
+    height:34px;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    cursor:pointer;
+    font-size:15px;
+    position:relative;
+  }
+  .icon-btn:hover{background:var(--soft-white);}
   .btn{
     border:none;
-    border-radius:9px;
-    padding:9px 18px;
-    font-size:13px;
+    border-radius:8px;
+    padding:7px 12px;
+    font-size:12px;
     font-weight:600;
     cursor:pointer;
     font-family:inherit;
   }
   .btn-primary{background:var(--green);color:#fff;}
   .btn-primary:hover{background:var(--green-dark);}
-  .btn-ghost{background:transparent;color:var(--soft-black);border:1px solid var(--border);}
-  .btn-ghost:hover{background:var(--soft-white);}
 
-  table{width:100%;border-collapse:collapse;font-size:12.5px;}
+  .popover{
+    position:absolute;
+    top:calc(100% + 6px);
+    left:0;
+    background:#fff;
+    border:1px solid var(--border);
+    border-radius:10px;
+    box-shadow:0 6px 20px rgba(0,0,0,.12);
+    padding:8px;
+    z-index:30;
+    min-width:150px;
+  }
+  .popover button.opt{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    width:100%;
+    background:none;
+    border:none;
+    text-align:right;
+    padding:7px 8px;
+    border-radius:7px;
+    font-size:12.5px;
+    color:var(--black);
+    cursor:pointer;
+  }
+  .popover button.opt:hover{background:var(--soft-white);}
+
+  table{width:100%;border-collapse:collapse;font-size:12px;}
   thead th{
     background:var(--soft-white);
     color:var(--soft-black);
     font-weight:600;
     text-align:right;
-    padding:9px 10px;
+    padding:8px 8px;
     border-bottom:1px solid var(--border);
     white-space:nowrap;
   }
-  tbody td{padding:9px 10px;border-bottom:1px solid var(--border);vertical-align:top;}
-  tbody tr.used td{color:#B4B0A6;}
-  tbody tr.used .title-text{text-decoration:line-through;text-decoration-color:#D6D2C6;}
+  tbody td{padding:8px 8px;border-bottom:1px solid var(--border);vertical-align:top;}
   tbody tr:hover{background:#FCFBF8;}
 
   .badge{
     display:inline-block;
-    padding:3px 11px;
+    padding:3px 10px;
     border-radius:20px;
-    font-size:11px;
+    font-size:10.5px;
     font-weight:700;
     white-space:nowrap;
   }
-  .badge.cat-تداعيات{background:#F5E5E9;color:var(--maroon);}
-  .badge.cat-سيناريوهات{background:#E2F5F1;color:#2E7A6D;}
 
-  .title-cell{max-width:260px;}
+  .title-cell{max-width:230px;}
   .title-text{font-weight:600;color:var(--black);}
-  .summary-text{font-size:11.5px;color:var(--soft-black);margin-top:3px;}
-  a.article-link{color:var(--green);text-decoration:none;font-size:11.5px;display:inline-flex;align-items:center;gap:3px;}
+  .summary-text{font-size:11px;color:var(--soft-black);margin-top:3px;}
+  .source-text{font-size:11px;color:var(--brown);margin-top:2px;}
+  a.article-link{color:var(--green);text-decoration:none;font-size:11px;display:inline-flex;align-items:center;gap:3px;}
   a.article-link:hover{text-decoration:underline;}
 
-  input[type=checkbox]{width:19px;height:19px;accent-color:var(--green);cursor:pointer;}
+  input[type=checkbox]{width:18px;height:18px;accent-color:var(--green);cursor:pointer;}
 
-  .empty{text-align:center;padding:34px 10px;color:var(--soft-black);font-size:13px;}
-  .empty i{font-size:26px;color:var(--gray);display:block;margin-bottom:8px;}
+  .used-cell{position:relative;}
+  .used-badge{
+    border:1px solid var(--border);
+    background:var(--soft-white);
+    border-radius:20px;
+    padding:4px 10px;
+    font-size:11px;
+    color:var(--black);
+    cursor:pointer;
+    display:inline-flex;
+    align-items:center;
+    gap:4px;
+  }
+  .used-badge.has-users{background:var(--green-dark);color:#fff;border-color:var(--green-dark);}
+  .used-popover{
+    position:absolute;
+    top:calc(100% + 6px);
+    right:0;
+    background:#fff;
+    border:1px solid var(--border);
+    border-radius:10px;
+    box-shadow:0 6px 20px rgba(0,0,0,.14);
+    padding:10px;
+    z-index:30;
+    width:170px;
+  }
+  .used-chip{
+    display:inline-flex;
+    align-items:center;
+    gap:5px;
+    background:var(--soft-white);
+    border-radius:14px;
+    padding:3px 8px;
+    font-size:11px;
+    margin:2px 3px 2px 0;
+  }
+  .used-chip button{border:none;background:none;color:var(--soft-black);cursor:pointer;font-size:11px;padding:0;}
+  .used-add{display:flex;gap:5px;margin-top:6px;}
+  .used-add input{flex:1;font-size:11px;padding:5px 7px;}
+  .used-add button{font-size:11px;padding:5px 9px;}
+
+  .empty{text-align:center;padding:30px 10px;color:var(--soft-black);font-size:13px;}
+  .empty i{font-size:24px;color:var(--gray);display:block;margin-bottom:8px;}
 </style>
 </head>
 <body>
 
 <div class="topbar">
-  <h1>سجل البيانات الخام اليومي</h1>
+  <h1>عين</h1>
   <div class="badge-day" id="today-badge"><i class="ti ti-calendar"></i><span></span></div>
 </div>
 
@@ -181,46 +260,48 @@
 
   <div class="stats" id="stats"></div>
 
-  <div class="card">
+  <div class="toolbar-card">
     <div class="dropzone" id="dropzone">
       <i class="ti ti-file-spreadsheet"></i>
       Upload File
     </div>
     <input type="file" id="file-input" accept=".xlsx,.xls">
-    <div class="upload-status" id="upload-status"></div>
-  </div>
 
-  <div class="card">
-    <h2><i class="ti ti-filter"></i>عرض حسب الأسبوع والفئة</h2>
-    <div class="filter-row">
-      <div class="field">
-        <label>الأسبوع</label>
-        <select id="f-week"></select>
-      </div>
-      <div class="field">
-        <label>الفئة</label>
-        <select id="f-category">
-          <option value="">كل الفئات</option>
-          <option value="تداعيات">تداعيات الحرب الإيرانية إقليميًا ودوليًا</option>
-          <option value="سيناريوهات">أبرز السيناريوهات والمقترحات</option>
-        </select>
-      </div>
-      <div class="field">
-        <button class="btn btn-ghost" id="btn-clear">مسح الفلتر</button>
-      </div>
-      <div class="field" style="margin-right:auto;">
-        <button class="btn btn-ghost" id="btn-refresh"><i class="ti ti-refresh"></i></button>
+    <div class="field">
+      <label>الأسبوع</label>
+      <select id="f-week"></select>
+    </div>
+    <div class="field">
+      <label>الفئة</label>
+      <select id="f-category">
+        <option value="">كل الفئات</option>
+        <option value="تداعيات">تداعيات</option>
+        <option value="سيناريوهات">سيناريوهات</option>
+        <option value="حلول">حلول</option>
+        <option value="اقتصادي">اقتصادي</option>
+        <option value="مراكز أبحاث">مراكز أبحاث</option>
+      </select>
+    </div>
+
+    <button class="icon-btn" id="btn-refresh" title="تحديث"><i class="ti ti-refresh"></i></button>
+
+    <div style="position:relative;margin-right:auto;">
+      <button class="icon-btn" id="btn-export" title="تصدير"><i class="ti ti-download"></i></button>
+      <div class="popover" id="export-popover" style="display:none;">
+        <button class="opt" id="export-excel"><i class="ti ti-file-spreadsheet"></i> تصدير Excel</button>
+        <button class="opt" id="export-pdf"><i class="ti ti-file-type-pdf"></i> تصدير PDF</button>
       </div>
     </div>
+
+    <span class="upload-status" id="upload-status"></span>
   </div>
 
   <div class="card">
-    <h2><i class="ti ti-list"></i>المقالات</h2>
     <div style="overflow-x:auto;">
       <table>
         <thead>
           <tr>
-            <th id="th-date" style="cursor:pointer;user-select:none;">التاريخ <i class="ti ti-arrow-down" id="date-sort-icon" style="font-size:12px;"></i></th>
+            <th id="th-date" style="cursor:pointer;user-select:none;">التاريخ <i class="ti ti-arrow-down" id="date-sort-icon" style="font-size:11px;"></i></th>
             <th>الفئة</th>
             <th>العنوان</th>
             <th style="text-align:center;">تمت المراجعة</th>
@@ -245,6 +326,15 @@
   const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
   let articles = [];
+
+  var CATEGORY_LIST = ['تداعيات','سيناريوهات','حلول','اقتصادي','مراكز أبحاث'];
+  var CATEGORY_STYLES = {
+    'تداعيات': {bg:'#F5E5E9', color:'#952E46'},
+    'سيناريوهات': {bg:'#E2F5F1', color:'#2E7A6D'},
+    'حلول': {bg:'#E8F0EA', color:'#1c4a30'},
+    'اقتصادي': {bg:'#FBF1DC', color:'#7A5F00'},
+    'مراكز أبحاث': {bg:'#E7EAF2', color:'#1B365D'}
+  };
 
   function escapeHtml(s){
     return String(s || '').replace(/[&<>"']/g, function(c){
@@ -297,7 +387,7 @@
 
   function fillWeekSelect(){
     var sel = document.getElementById('f-week');
-    var opts = ['<option value="">الكل</option>'];
+    var opts = ['<option value="">كل الأسابيع</option>'];
     WEEKS.forEach(function(w, i){
       opts.push('<option value="'+i+'">'+w.label+'</option>');
     });
@@ -317,21 +407,26 @@
       document.getElementById('empty-msg').textContent = 'حدث خطأ في جلب البيانات، يُرجى التأكد من إعدادات Supabase';
       return;
     }
-    articles = data || [];
+    articles = (data || []).map(function(a){
+      var ub = a.used_by;
+      if(typeof ub === 'string'){ try{ ub = JSON.parse(ub); }catch(e){ ub = []; } }
+      if(!Array.isArray(ub)) ub = [];
+      a.used_by = ub;
+      return a;
+    });
     render();
   }
 
   function renderStats(rows){
     var total = rows.length;
-    var used = rows.filter(function(a){ return a.used; }).length;
-    var cat1 = rows.filter(function(a){ return a.category === 'تداعيات'; }).length;
-    var cat2 = rows.filter(function(a){ return a.category === 'سيناريوهات'; }).length;
     var stats = document.getElementById('stats');
-    stats.innerHTML =
-      '<div class="stat"><div class="n">'+total+'</div><div class="l">إجمالي المقالات</div></div>'+
-      '<div class="stat used"><div class="n">'+used+'</div><div class="l">استُخدمت</div></div>'+
-      '<div class="stat cat1"><div class="n">'+cat1+'</div><div class="l">تداعيات الحرب</div></div>'+
-      '<div class="stat cat2"><div class="n">'+cat2+'</div><div class="l">سيناريوهات ومقترحات</div></div>';
+    var html = '<div class="stat total"><div class="n">'+total+'</div><div class="l">إجمالي المقالات</div></div>';
+    CATEGORY_LIST.forEach(function(cat){
+      var n = rows.filter(function(a){ return a.category === cat; }).length;
+      var style = CATEGORY_STYLES[cat];
+      html += '<div class="stat"><div class="n" style="color:'+style.color+';">'+n+'</div><div class="l">'+escapeHtml(cat)+'</div></div>';
+    });
+    stats.innerHTML = html;
   }
 
   let dateSortOrder = 'desc';
@@ -365,6 +460,20 @@
     renderTable(getFiltered());
   };
 
+  function closeAllPopovers(except){
+    Array.prototype.forEach.call(document.querySelectorAll('.used-popover'), function(p){
+      if(p !== except) p.style.display = 'none';
+    });
+    var exp = document.getElementById('export-popover');
+    if(exp !== except) exp.style.display = 'none';
+  }
+
+  document.addEventListener('click', function(e){
+    if(!e.target.closest('.used-cell') && !e.target.closest('#btn-export') && !e.target.closest('#export-popover')){
+      closeAllPopovers(null);
+    }
+  });
+
   function renderTable(rows){
     var tbody = document.getElementById('tbody');
     var emptyMsg = document.getElementById('empty-msg');
@@ -377,29 +486,37 @@
     emptyMsg.style.display = 'none';
     tbody.innerHTML = rows.map(function(a){
       var linkHtml = a.link ? '<div><a class="article-link" href="'+escapeHtml(a.link)+'" target="_blank" rel="noopener"><i class="ti ti-external-link"></i>فتح الرابط</a></div>' : '';
-      return '<tr class="'+(a.used?'used':'')+'" data-id="'+a.id+'">'+
+      var sourceHtml = a.source ? '<div class="source-text">'+escapeHtml(a.source)+'</div>' : '';
+      var style = CATEGORY_STYLES[a.category] || {bg:'#EEEEEE', color:'#555'};
+      var usedBy = Array.isArray(a.used_by) ? a.used_by : [];
+      var chips = usedBy.map(function(name, idx){
+        return '<span class="used-chip">'+escapeHtml(name)+'<button class="used-remove" data-id="'+a.id+'" data-idx="'+idx+'">×</button></span>';
+      }).join('');
+      return '<tr data-id="'+a.id+'">'+
         '<td>'+formatDateDisplay(a.article_date)+'</td>'+
-        '<td><span class="badge cat-'+escapeHtml(a.category)+'">'+escapeHtml(a.category)+'</span></td>'+
+        '<td><span class="badge" style="background:'+style.bg+';color:'+style.color+';">'+escapeHtml(a.category)+'</span></td>'+
         '<td class="title-cell">'+
           '<div class="title-text">'+escapeHtml(a.title)+'</div>'+
           (a.summary ? '<div class="summary-text">'+escapeHtml(a.summary)+'</div>' : '')+
+          sourceHtml+
           linkHtml+
         '</td>'+
         '<td><div style="display:flex;justify-content:center;"><input type="checkbox" class="reviewed-check" data-id="'+a.id+'" '+(a.reviewed?'checked':'')+'></div></td>'+
-        '<td><div style="display:flex;justify-content:center;"><input type="checkbox" class="used-check" data-id="'+a.id+'" '+(a.used?'checked':'')+'></div></td>'+
+        '<td>'+
+          '<div class="used-cell" data-id="'+a.id+'">'+
+            '<button class="used-badge'+(usedBy.length?' has-users':'')+'" data-id="'+a.id+'"><i class="ti ti-users"></i> '+usedBy.length+'</button>'+
+            '<div class="used-popover" id="used-pop-'+a.id+'" style="display:none;">'+
+              '<div class="used-names">'+(chips || '<span style="font-size:11px;color:var(--soft-black);">لا يوجد بعد</span>')+'</div>'+
+              '<div class="used-add">'+
+                '<input type="text" class="used-name-input" data-id="'+a.id+'" placeholder="اسمك">'+
+                '<button class="btn btn-primary used-add-btn" data-id="'+a.id+'">إضافة</button>'+
+              '</div>'+
+            '</div>'+
+          '</div>'+
+        '</td>'+
       '</tr>';
     }).join('');
 
-    Array.prototype.forEach.call(document.querySelectorAll('.used-check'), function(cb){
-      cb.onchange = async function(){
-        var id = cb.dataset.id;
-        var art = articles.find(function(x){ return String(x.id) === String(id); });
-        if(!art) return;
-        art.used = cb.checked;
-        await sb.from('raw_articles').update({ used: art.used }).eq('id', id);
-        render();
-      };
-    });
     Array.prototype.forEach.call(document.querySelectorAll('.reviewed-check'), function(cb){
       cb.onchange = async function(){
         var id = cb.dataset.id;
@@ -407,6 +524,56 @@
         if(!art) return;
         art.reviewed = cb.checked;
         await sb.from('raw_articles').update({ reviewed: art.reviewed }).eq('id', id);
+      };
+    });
+
+    Array.prototype.forEach.call(document.querySelectorAll('.used-badge'), function(btn){
+      btn.onclick = function(e){
+        e.stopPropagation();
+        var id = btn.dataset.id;
+        var pop = document.getElementById('used-pop-'+id);
+        var isOpen = pop.style.display === 'block';
+        closeAllPopovers(null);
+        pop.style.display = isOpen ? 'none' : 'block';
+      };
+    });
+
+    Array.prototype.forEach.call(document.querySelectorAll('.used-add-btn'), function(btn){
+      btn.onclick = async function(e){
+        e.stopPropagation();
+        var id = btn.dataset.id;
+        var input = document.querySelector('.used-name-input[data-id="'+id+'"]');
+        var name = input.value.trim();
+        if(!name) return;
+        var art = articles.find(function(x){ return String(x.id) === String(id); });
+        if(!art) return;
+        if(!art.used_by.includes(name)) art.used_by.push(name);
+        await sb.from('raw_articles').update({ used_by: art.used_by }).eq('id', id);
+        input.value = '';
+        render();
+      };
+    });
+
+    Array.prototype.forEach.call(document.querySelectorAll('.used-name-input'), function(inp){
+      inp.onclick = function(e){ e.stopPropagation(); };
+      inp.onkeydown = function(e){
+        if(e.key === 'Enter'){
+          var id = inp.dataset.id;
+          document.querySelector('.used-add-btn[data-id="'+id+'"]').click();
+        }
+      };
+    });
+
+    Array.prototype.forEach.call(document.querySelectorAll('.used-remove'), function(btn){
+      btn.onclick = async function(e){
+        e.stopPropagation();
+        var id = btn.dataset.id;
+        var idx = Number(btn.dataset.idx);
+        var art = articles.find(function(x){ return String(x.id) === String(id); });
+        if(!art) return;
+        art.used_by.splice(idx, 1);
+        await sb.from('raw_articles').update({ used_by: art.used_by }).eq('id', id);
+        render();
       };
     });
   }
@@ -419,12 +586,147 @@
 
   document.getElementById('f-week').onchange = render;
   document.getElementById('f-category').onchange = render;
-  document.getElementById('btn-clear').onclick = function(){
-    document.getElementById('f-week').value = '';
-    document.getElementById('f-category').value = '';
-    render();
-  };
   document.getElementById('btn-refresh').onclick = loadArticles;
+
+  document.getElementById('btn-export').onclick = function(e){
+    e.stopPropagation();
+    var pop = document.getElementById('export-popover');
+    var isOpen = pop.style.display === 'block';
+    closeAllPopovers(null);
+    pop.style.display = isOpen ? 'none' : 'block';
+  };
+
+  function exportRows(){
+    return getFiltered().map(function(a){
+      return {
+        'التاريخ': formatDateDisplay(a.article_date),
+        'الفئة': a.category,
+        'العنوان': a.title,
+        'المصدر': a.source || '',
+        'الرابط': a.link || '',
+        'ملخص عام': a.summary || '',
+        'تمت المراجعة': a.reviewed ? 'نعم' : 'لا',
+        'استخدمها': (a.used_by || []).join('، ')
+      };
+    });
+  }
+
+  document.getElementById('export-excel').onclick = function(){
+    var rows = exportRows();
+    var ws = XLSX.utils.json_to_sheet(rows);
+    var wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'عين');
+    XLSX.writeFile(wb, 'عين-تصدير.xlsx');
+    closeAllPopovers(null);
+  };
+
+  document.getElementById('export-pdf').onclick = function(){
+    var filteredRows = getFiltered();
+    var rows = exportRows();
+    var headers = ['التاريخ','الفئة','العنوان','المصدر','الرابط','ملخص عام','تمت المراجعة','استخدمها'];
+
+    var weekIdx = document.getElementById('f-week').value;
+    var weekLabel = weekIdx !== '' ? WEEKS[Number(weekIdx)].label : 'كل الأسابيع';
+    var catVal = document.getElementById('f-category').value;
+    var catLabel = catVal || 'كل الفئات';
+    var exportDate = formatDateDisplay(todayISO());
+
+    var statCards = '<div class="pdf-stat total"><div class="n">'+filteredRows.length+'</div><div class="l">إجمالي المقالات</div></div>' +
+      CATEGORY_LIST.map(function(cat){
+        var n = filteredRows.filter(function(a){ return a.category === cat; }).length;
+        var style = CATEGORY_STYLES[cat];
+        return '<div class="pdf-stat" style="background:'+style.bg+';"><div class="n" style="color:'+style.color+';">'+n+'</div><div class="l" style="color:'+style.color+';">'+escapeHtml(cat)+'</div></div>';
+      }).join('');
+
+    var tableRows = filteredRows.map(function(a){
+      var style = CATEGORY_STYLES[a.category] || {bg:'#EEEEEE', color:'#555'};
+      var usedBy = (a.used_by || []).join('، ') || '—';
+      return '<tr>'+
+        '<td class="c-date">'+formatDateDisplay(a.article_date)+'</td>'+
+        '<td><span class="pdf-badge" style="background:'+style.bg+';color:'+style.color+';">'+escapeHtml(a.category)+'</span></td>'+
+        '<td class="c-title"><div class="t-title">'+escapeHtml(a.title)+'</div>'+
+          (a.summary ? '<div class="t-summary">'+escapeHtml(a.summary)+'</div>' : '')+'</td>'+
+        '<td>'+escapeHtml(a.source || '—')+'</td>'+
+        '<td class="c-center">'+(a.reviewed ? '<span class="chk-yes">✓</span>' : '<span class="chk-no">—</span>')+'</td>'+
+        '<td class="c-used">'+escapeHtml(usedBy)+'</td>'+
+      '</tr>';
+    }).join('');
+
+    var html = '<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>عين — تقرير</title><style>'+
+      '@page{ size:A4; margin:16mm 14mm; }'+
+      '*{box-sizing:border-box;}'+
+      'body{margin:0;font-family:Tahoma,"Segoe UI",Arial,sans-serif;color:#2B2B29;}'+
+
+      '.cover{'+
+        'height:100vh;'+
+        'display:flex;flex-direction:column;align-items:center;justify-content:center;'+
+        'background:#286140;color:#fff;text-align:center;'+
+        'page-break-after:always;'+
+      '}'+
+      '.cover .logo{font-size:64px;font-weight:800;letter-spacing:2px;}'+
+      '.cover .gold-line{width:70px;height:4px;background:#B58500;border-radius:4px;margin:18px 0;}'+
+      '.cover .subtitle{font-size:18px;font-weight:600;color:#F2F2F2;margin-bottom:36px;}'+
+      '.cover .meta{font-size:13px;color:#D8E5DC;line-height:2;}'+
+      '.cover .meta b{color:#fff;}'+
+
+      '.page-head{'+
+        'display:flex;align-items:center;justify-content:space-between;'+
+        'border-bottom:2px solid #286140;padding-bottom:10px;margin-bottom:16px;'+
+      '}'+
+      '.page-head .brand{font-size:20px;font-weight:800;color:#286140;}'+
+      '.page-head .date{font-size:11px;color:#707070;}'+
+
+      '.pdf-stats{display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap;}'+
+      '.pdf-stat{flex:1;min-width:80px;background:#F2F2F2;border-radius:8px;padding:10px 6px;text-align:center;}'+
+      '.pdf-stat.total{background:#E4DFD0;}'+
+      '.pdf-stat .n{font-size:18px;font-weight:800;color:#1B365D;}'+
+      '.pdf-stat .l{font-size:9.5px;color:#5A5959;margin-top:2px;}'+
+
+      'table{width:100%;border-collapse:collapse;font-size:10px;}'+
+      'thead{display:table-header-group;}'+
+      'tr{page-break-inside:avoid;}'+
+      'th{background:#286140;color:#fff;padding:7px 6px;text-align:right;font-weight:700;}'+
+      'td{padding:6px 6px;border-bottom:1px solid #E4DFD0;text-align:right;vertical-align:top;}'+
+      'tbody tr:nth-child(even){background:#FAF9F6;}'+
+      '.c-date{white-space:nowrap;color:#707070;}'+
+      '.c-title{max-width:170px;}'+
+      '.t-title{font-weight:700;color:#2B2B29;}'+
+      '.t-summary{font-size:9px;color:#707070;margin-top:2px;}'+
+      '.c-center{text-align:center;}'+
+      '.chk-yes{color:#286140;font-weight:800;}'+
+      '.chk-no{color:#C7C8CA;}'+
+      '.c-used{font-size:9px;color:#6E6259;max-width:90px;}'+
+      '.pdf-badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:9px;font-weight:700;white-space:nowrap;}'+
+
+      '.footer-note{margin-top:14px;font-size:9px;color:#B0ACA0;text-align:center;}'+
+      '</style></head><body>'+
+
+      '<div class="cover">'+
+        '<div class="logo">عين</div>'+
+        '<div class="gold-line"></div>'+
+        '<div class="subtitle">تقرير بيانات مرصودة</div>'+
+        '<div class="meta">'+
+          '<div><b>الأسبوع:</b> '+escapeHtml(weekLabel)+'</div>'+
+          '<div><b>الفئة:</b> '+escapeHtml(catLabel)+'</div>'+
+          '<div><b>تاريخ التصدير:</b> '+escapeHtml(exportDate)+'</div>'+
+        '</div>'+
+      '</div>'+
+
+      '<div class="page-head"><span class="brand">عين</span><span class="date">تاريخ التصدير: '+escapeHtml(exportDate)+'</span></div>'+
+      '<div class="pdf-stats">'+statCards+'</div>'+
+      '<table><thead><tr>'+
+        '<th>التاريخ</th><th>الفئة</th><th>العنوان</th><th>المصدر</th><th>راجُعت</th><th>استخدمها</th>'+
+      '</tr></thead><tbody>'+tableRows+'</tbody></table>'+
+      '<div class="footer-note">تم إنشاء هذا التقرير تلقائيًا من منصة عين</div>'+
+
+      '</body></html>';
+
+    var w = window.open('', '_blank');
+    w.document.write(html);
+    w.document.close();
+    setTimeout(function(){ w.print(); }, 400);
+    closeAllPopovers(null);
+  };
 
   var dropzone = document.getElementById('dropzone');
   var fileInput = document.getElementById('file-input');
@@ -457,12 +759,15 @@
     var s = String(val || '').trim();
     if(s.indexOf('تداعيات') !== -1) return 'تداعيات';
     if(s.indexOf('سيناريو') !== -1) return 'سيناريوهات';
+    if(s.indexOf('حلول') !== -1 || s.indexOf('حل') !== -1) return 'حلول';
+    if(s.indexOf('اقتصاد') !== -1) return 'اقتصادي';
+    if(s.indexOf('مراكز') !== -1 || s.indexOf('أبحاث') !== -1 || s.indexOf('ابحاث') !== -1) return 'مراكز أبحاث';
     return null;
   }
 
   async function handleFile(file){
     statusEl.style.color = 'var(--soft-black)';
-    statusEl.textContent = 'جاري القراءة...';
+    statusEl.textContent = 'جارٍ القراءة...';
     try{
       var buf = await file.arrayBuffer();
       var wb = XLSX.read(buf, { type: 'array', cellDates: false });
@@ -480,17 +785,19 @@
         var dateISO = excelDateToISO(r[0]);
         var category = normalizeCategory(r[1]);
         var title = String(r[2] || '').trim();
-        var link = String(r[3] || '').trim();
-        var summary = String(r[4] || '').trim();
+        var source = String(r[3] || '').trim();
+        var link = String(r[4] || '').trim();
+        var summary = String(r[5] || '').trim();
         if(!dateISO || !category || !title){ if(title || category){ skipped++; } continue; }
         toInsert.push({
           article_date: dateISO,
           category: category,
           title: title,
+          source: source || null,
           link: link || null,
           summary: summary || null,
-          used: false,
-          reviewed: false
+          reviewed: false,
+          used_by: []
         });
       }
 
