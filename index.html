@@ -286,6 +286,18 @@
       <select id="f-week"></select>
     </div>
     <div class="field">
+      <label>التصنيف</label>
+      <select id="f-classification">
+        <option value="">كل التصنيفات</option>
+        <option value="مراكز أبحاث">مراكز أبحاث</option>
+        <option value="وكالات أنباء">وكالات أنباء</option>
+        <option value="صحف ومؤسسات إخبارية">صحف ومؤسسات إخبارية</option>
+        <option value="مجلات ودوريات تحليلية">مجلات ودوريات تحليلية</option>
+        <option value="شبكات إخبارية وإذاعية">شبكات إخبارية وإذاعية</option>
+        <option value="منصات اقتصادية وإقليمية">منصات اقتصادية وإقليمية</option>
+      </select>
+    </div>
+    <div class="field">
       <label>الفئة</label>
       <select id="f-category">
         <option value="">كل الفئات</option>
@@ -293,7 +305,6 @@
         <option value="سيناريوهات">سيناريوهات</option>
         <option value="مقترحات">مقترحات</option>
         <option value="اقتصادي">اقتصادي</option>
-        <option value="مراكز الأبحاث">مراكز الأبحاث</option>
       </select>
     </div>
 
@@ -316,6 +327,7 @@
         <thead>
           <tr>
             <th id="th-date" style="cursor:pointer;user-select:none;">التاريخ <i class="ti ti-arrow-down" id="date-sort-icon" style="font-size:11px;"></i></th>
+            <th>التصنيف</th>
             <th>الفئة</th>
             <th>العنوان</th>
             <th style="text-align:center;">تمت المراجعة</th>
@@ -341,13 +353,22 @@
 
   let articles = [];
 
-  var CATEGORY_LIST = ['تداعيات','سيناريوهات','مقترحات','اقتصادي','مراكز الأبحاث'];
+  var CATEGORY_LIST = ['تداعيات','سيناريوهات','مقترحات','اقتصادي'];
   var CATEGORY_STYLES = {
     'تداعيات': {bg:'#F5E5E9', color:'#952E46'},
     'سيناريوهات': {bg:'#E2F5F1', color:'#2E7A6D'},
     'مقترحات': {bg:'#E8F0EA', color:'#1c4a30'},
-    'اقتصادي': {bg:'#FBF1DC', color:'#7A5F00'},
-    'مراكز الأبحاث': {bg:'#E7EAF2', color:'#1B365D'}
+    'اقتصادي': {bg:'#FBF1DC', color:'#7A5F00'}
+  };
+
+  var CLASSIFICATION_LIST = ['مراكز أبحاث','وكالات أنباء','صحف ومؤسسات إخبارية','مجلات ودوريات تحليلية','شبكات إخبارية وإذاعية','منصات اقتصادية وإقليمية'];
+  var CLASSIFICATION_STYLES = {
+    'مراكز أبحاث': {bg:'#E7EAF2', color:'#1B365D'},
+    'وكالات أنباء': {bg:'#E2F5F1', color:'#2E7A6D'},
+    'صحف ومؤسسات إخبارية': {bg:'#EFEBE6', color:'#6E6259'},
+    'مجلات ودوريات تحليلية': {bg:'#FBF1DC', color:'#7A5F00'},
+    'شبكات إخبارية وإذاعية': {bg:'#F5E5E9', color:'#952E46'},
+    'منصات اقتصادية وإقليمية': {bg:'#E4EFE8', color:'#1c4a30'}
   };
 
   function escapeHtml(s){
@@ -436,14 +457,13 @@
     var hero = document.getElementById('stats-hero');
     hero.innerHTML = '<i class="ti ti-chart-bar"></i><div><div class="n">'+total+'</div><div class="l">إجمالي المقالات</div></div>';
 
+    var reviewedCount = rows.filter(function(a){ return a.reviewed; }).length;
+    var usedCount = rows.filter(function(a){ return (a.used_by || []).length > 0; }).length;
+
     var stats = document.getElementById('stats');
-    var html = '';
-    CATEGORY_LIST.forEach(function(cat){
-      var n = rows.filter(function(a){ return a.category === cat; }).length;
-      var style = CATEGORY_STYLES[cat];
-      html += '<div class="stat"><div class="n" style="color:'+style.color+';">'+n+'</div><div class="l">'+escapeHtml(cat)+'</div></div>';
-    });
-    stats.innerHTML = html;
+    stats.innerHTML =
+      '<div class="stat"><div class="n" style="color:#1c4a30;">'+reviewedCount+'</div><div class="l">تمت المراجعة</div></div>' +
+      '<div class="stat"><div class="n" style="color:#785B22;">'+usedCount+'</div><div class="l">تم الاستخدام</div></div>';
   }
 
   let dateSortOrder = 'desc';
@@ -451,12 +471,14 @@
   function getFiltered(){
     var weekIdx = document.getElementById('f-week').value;
     var cat = document.getElementById('f-category').value;
+    var cls = document.getElementById('f-classification').value;
     var rows = articles.filter(function(a){
       if(weekIdx !== ''){
         var w = WEEKS[Number(weekIdx)];
         if(!(a.article_date >= w.start && a.article_date <= w.end)) return false;
       }
       if(cat && a.category !== cat) return false;
+      if(cls && a.classification !== cls) return false;
       return true;
     });
     rows.sort(function(x, y){
@@ -505,12 +527,15 @@
       var linkHtml = a.link ? '<div><a class="article-link" href="'+escapeHtml(a.link)+'" target="_blank" rel="noopener"><i class="ti ti-external-link"></i>فتح الرابط</a></div>' : '';
       var sourceHtml = a.source ? '<div class="source-text">'+escapeHtml(a.source)+'</div>' : '';
       var style = CATEGORY_STYLES[a.category] || {bg:'#EEEEEE', color:'#555'};
+      var clsStyle = CLASSIFICATION_STYLES[a.classification] || {bg:'#EEEEEE', color:'#999'};
+      var clsHtml = a.classification ? '<span class="badge" style="background:'+clsStyle.bg+';color:'+clsStyle.color+';">'+escapeHtml(a.classification)+'</span>' : '<span style="color:var(--gray);font-size:11px;">—</span>';
       var usedBy = Array.isArray(a.used_by) ? a.used_by : [];
       var chips = usedBy.map(function(name, idx){
         return '<span class="used-chip">'+escapeHtml(name)+'<button class="used-remove" data-id="'+a.id+'" data-idx="'+idx+'">×</button></span>';
       }).join('');
       return '<tr data-id="'+a.id+'">'+
         '<td>'+formatDateDisplay(a.article_date)+'</td>'+
+        '<td>'+clsHtml+'</td>'+
         '<td><span class="badge" style="background:'+style.bg+';color:'+style.color+';">'+escapeHtml(a.category)+'</span></td>'+
         '<td class="title-cell">'+
           '<div class="title-text">'+escapeHtml(a.title)+'</div>'+
@@ -603,6 +628,7 @@
 
   document.getElementById('f-week').onchange = render;
   document.getElementById('f-category').onchange = render;
+  document.getElementById('f-classification').onchange = render;
   document.getElementById('btn-refresh').onclick = loadArticles;
 
   document.getElementById('btn-export').onclick = function(e){
@@ -617,6 +643,7 @@
     return getFiltered().map(function(a){
       return {
         'التاريخ': formatDateDisplay(a.article_date),
+        'التصنيف': a.classification || '',
         'الفئة': a.category,
         'العنوان': a.title,
         'المصدر': a.source || '',
@@ -630,8 +657,8 @@
 
   document.getElementById('export-excel').onclick = async function(){
     var rows = exportRows();
-    var headers = ['التاريخ','الفئة','العنوان','المصدر','الرابط','ملخص عام','تمت المراجعة','استخدمها'];
-    var widths = [13, 15, 42, 18, 28, 42, 14, 22];
+    var headers = ['التاريخ','التصنيف','الفئة','العنوان','المصدر','الرابط','ملخص عام','تمت المراجعة','استخدمها'];
+    var widths = [13, 20, 15, 42, 18, 28, 42, 14, 22];
 
     var wb = new ExcelJS.Workbook();
     var ws = wb.addWorksheet('بيانات عين', { views: [{ rightToLeft: true, state: 'frozen', ySplit: 1 }] });
@@ -659,6 +686,28 @@
       }
     });
 
+    var clsFormula = '"' + CLASSIFICATION_LIST.join(',') + '"';
+    var catFormula = '"' + CATEGORY_LIST.join(',') + '"';
+    var lastRow = rows.length + 30;
+    for(var r = 2; r <= lastRow + 1; r++){
+      ws.getCell('B' + r).dataValidation = {
+        type: 'list',
+        allowBlank: true,
+        formulae: [clsFormula],
+        showErrorMessage: true,
+        errorTitle: 'تصنيف غير صحيح',
+        error: 'يُرجى اختيار تصنيف من القائمة'
+      };
+      ws.getCell('C' + r).dataValidation = {
+        type: 'list',
+        allowBlank: true,
+        formulae: [catFormula],
+        showErrorMessage: true,
+        errorTitle: 'فئة غير صحيحة',
+        error: 'يُرجى اختيار فئة من القائمة'
+      };
+    }
+
     var buffer = await wb.xlsx.writeBuffer();
     var blob = new Blob([buffer], { type: 'application/octet-stream' });
     var url = URL.createObjectURL(blob);
@@ -675,12 +724,14 @@
   document.getElementById('export-pdf').onclick = function(){
     var filteredRows = getFiltered();
     var rows = exportRows();
-    var headers = ['التاريخ','الفئة','العنوان','المصدر','الرابط','ملخص عام','تمت المراجعة','استخدمها'];
+    var headers = ['التاريخ','التصنيف','الفئة','العنوان','المصدر','الرابط','ملخص عام','تمت المراجعة','استخدمها'];
 
     var weekIdx = document.getElementById('f-week').value;
     var weekLabel = weekIdx !== '' ? WEEKS[Number(weekIdx)].label : 'كل الأسابيع';
     var catVal = document.getElementById('f-category').value;
     var catLabel = catVal || 'كل الفئات';
+    var clsVal = document.getElementById('f-classification').value;
+    var clsLabel = clsVal || 'كل التصنيفات';
     var exportDate = formatDateDisplay(todayISO());
 
     var reviewedCount = filteredRows.filter(function(a){ return a.reviewed; }).length;
@@ -688,18 +739,15 @@
 
     var statCards = '<div class="pdf-stat total"><div class="n">'+filteredRows.length+'</div><div class="l">إجمالي المقالات</div></div>' +
       '<div class="pdf-stat" style="background:#E4EFE8;"><div class="n" style="color:#1c4a30;">'+reviewedCount+'</div><div class="l" style="color:#1c4a30;">تمت المراجعة</div></div>' +
-      '<div class="pdf-stat" style="background:#F2E7D2;"><div class="n" style="color:#785B22;">'+usedCount+'</div><div class="l" style="color:#785B22;">تم الاستخدام</div></div>' +
-      CATEGORY_LIST.map(function(cat){
-        var n = filteredRows.filter(function(a){ return a.category === cat; }).length;
-        var style = CATEGORY_STYLES[cat];
-        return '<div class="pdf-stat" style="background:'+style.bg+';"><div class="n" style="color:'+style.color+';">'+n+'</div><div class="l" style="color:'+style.color+';">'+escapeHtml(cat)+'</div></div>';
-      }).join('');
+      '<div class="pdf-stat" style="background:#F2E7D2;"><div class="n" style="color:#785B22;">'+usedCount+'</div><div class="l" style="color:#785B22;">تم الاستخدام</div></div>';
 
     var tableRows = filteredRows.map(function(a){
       var style = CATEGORY_STYLES[a.category] || {bg:'#EEEEEE', color:'#555'};
+      var clsStyle = CLASSIFICATION_STYLES[a.classification] || {bg:'#EEEEEE', color:'#999'};
       var usedBy = (a.used_by || []).join('، ') || '—';
       return '<tr>'+
         '<td class="c-date">'+formatDateDisplay(a.article_date)+'</td>'+
+        '<td>'+(a.classification ? '<span class="pdf-badge" style="background:'+clsStyle.bg+';color:'+clsStyle.color+';">'+escapeHtml(a.classification)+'</span>' : '—')+'</td>'+
         '<td><span class="pdf-badge" style="background:'+style.bg+';color:'+style.color+';">'+escapeHtml(a.category)+'</span></td>'+
         '<td class="c-title"><div class="t-title">'+escapeHtml(a.title)+'</div>'+
           (a.summary ? '<div class="t-summary">'+escapeHtml(a.summary)+'</div>' : '')+'</td>'+
@@ -764,6 +812,7 @@
         '<div class="subtitle">تقرير بيانات مرصودة</div>'+
         '<div class="meta">'+
           '<div><b>الأسبوع:</b> '+escapeHtml(weekLabel)+'</div>'+
+          '<div><b>التصنيف:</b> '+escapeHtml(clsLabel)+'</div>'+
           '<div><b>الفئة:</b> '+escapeHtml(catLabel)+'</div>'+
           '<div><b>تاريخ التصدير:</b> '+escapeHtml(exportDate)+'</div>'+
         '</div>'+
@@ -772,7 +821,7 @@
       '<div class="page-head"><span class="brand">عين</span><span class="date">تاريخ التصدير: '+escapeHtml(exportDate)+'</span></div>'+
       '<div class="pdf-stats">'+statCards+'</div>'+
       '<table><thead><tr>'+
-        '<th>التاريخ</th><th>الفئة</th><th>العنوان</th><th>المصدر</th><th>راجُعت</th><th>استخدمها</th>'+
+        '<th>التاريخ</th><th>التصنيف</th><th>الفئة</th><th>العنوان</th><th>المصدر</th><th>راجُعت</th><th>استخدمها</th>'+
       '</tr></thead><tbody>'+tableRows+'</tbody></table>'+
       '<div class="footer-note">تم إنشاء هذا التقرير تلقائيًا من منصة عين</div>'+
 
@@ -818,7 +867,18 @@
     if(s.indexOf('سيناريو') !== -1) return 'سيناريوهات';
     if(s.indexOf('مقترحات') !== -1 || s.indexOf('حلول') !== -1 || s.indexOf('حل') !== -1) return 'مقترحات';
     if(s.indexOf('اقتصاد') !== -1) return 'اقتصادي';
-    if(s.indexOf('مراكز') !== -1 || s.indexOf('أبحاث') !== -1 || s.indexOf('ابحاث') !== -1) return 'مراكز الأبحاث';
+    return null;
+  }
+
+  function normalizeClassification(val){
+    var s = String(val || '').trim();
+    if(!s) return null;
+    if(s.indexOf('مراكز') !== -1 || s.indexOf('أبحاث') !== -1 || s.indexOf('ابحاث') !== -1) return 'مراكز أبحاث';
+    if(s.indexOf('وكالات') !== -1 || s.indexOf('أنباء') !== -1 || s.indexOf('انباء') !== -1) return 'وكالات أنباء';
+    if(s.indexOf('صحف') !== -1 || s.indexOf('إخبارية') !== -1 && s.indexOf('صحف') !== -1) return 'صحف ومؤسسات إخبارية';
+    if(s.indexOf('مجلات') !== -1 || s.indexOf('دوريات') !== -1) return 'مجلات ودوريات تحليلية';
+    if(s.indexOf('شبكات') !== -1 || s.indexOf('إذاعية') !== -1 || s.indexOf('اذاعية') !== -1) return 'شبكات إخبارية وإذاعية';
+    if(s.indexOf('اقتصادية') !== -1 || s.indexOf('إقليمية') !== -1 || s.indexOf('اقليمية') !== -1) return 'منصات اقتصادية وإقليمية';
     return null;
   }
 
@@ -840,14 +900,16 @@
         var r = rows[i];
         if(!r || !r.length) continue;
         var dateISO = excelDateToISO(r[0]);
-        var category = normalizeCategory(r[1]);
-        var title = String(r[2] || '').trim();
-        var source = String(r[3] || '').trim();
-        var link = String(r[4] || '').trim();
-        var summary = String(r[5] || '').trim();
+        var classification = normalizeClassification(r[1]);
+        var category = normalizeCategory(r[2]);
+        var title = String(r[3] || '').trim();
+        var source = String(r[4] || '').trim();
+        var link = String(r[5] || '').trim();
+        var summary = String(r[6] || '').trim();
         if(!dateISO || !category || !title){ if(title || category){ skipped++; } continue; }
         toInsert.push({
           article_date: dateISO,
+          classification: classification || null,
           category: category,
           title: title,
           source: source || null,
