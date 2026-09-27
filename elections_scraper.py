@@ -4,7 +4,7 @@ Ayn - US Elections 2026 scraper.
 
 Every run:
   1. Search the approved sources (sources.json) using the keywords (keywords.json)
-     via Google News RSS, GDELT and the sources' own RSS feeds.
+     via Google News RSS and the sources' own RSS feeds.
   2. Check 1 (keywords): items must match the election keywords.
   3. Check 2 (content): Claude reads title + snippet, keeps only items that are
      genuinely about US elections (news, plus substantive analysis only),
@@ -47,7 +47,6 @@ MATCH_DAYS = 7           # compare new items with stories from the last 7 days
 MAX_EXISTING = 400       # max existing stories sent to Claude per call
 MAX_CANDIDATES = 1500    # safety cap per run
 GOOGLE_PAUSE = 1.0       # seconds between Google News requests
-GDELT_PAUSE = 5.5        # GDELT allows about one request every 5 seconds
 
 
 def log(*args):
@@ -71,6 +70,11 @@ def sb(method, path, params=None, body=None, prefer=None):
         method, f"{SB_URL}/rest/v1/{path}", headers=headers, params=params,
         data=json.dumps(body) if body is not None else None, timeout=60,
     )
+    if r.status_code in (401, 403) or '"42501"' in r.text:
+        raise RuntimeError(
+            f"Supabase {method} {path} -> {r.status_code}: permission denied. "
+            "SUPABASE_SERVICE_KEY must be the service_role / secret key, not the anon / publishable key. "
+            f"Details: {r.text[:200]}")
     if r.status_code >= 300:
         raise RuntimeError(f"Supabase {method} {path} -> {r.status_code}: {r.text[:300]}")
     return r.json() if r.text.strip() else None
@@ -186,40 +190,6 @@ def fetch_google(domain, query_chunk, since):
             "published": to_dt(e.get("published_parsed")),
             "snippet": "",
             "origin": "google",
-        })
-    return out
-
-
-def fetch_gdelt(domain, query_chunk, since):
-    params = {
-        "query": f"{query_chunk} domain:{domain} sourcelang:english",
-        "mode": "ArtList",
-        "format": "json",
-        "maxrecords": "250",
-        "sort": "DateDesc",
-        "startdatetime": since.astimezone(UTC).strftime("%Y%m%d%H%M%S"),
-    }
-    r = requests.get("https://api.gdeltproject.org/api/v2/doc/doc",
-                     params=params, headers=HEADERS, timeout=45)
-    if r.status_code != 200:
-        raise RuntimeError(f"HTTP {r.status_code}")
-    try:
-        data = r.json()
-    except ValueError:
-        raise RuntimeError(r.text[:120].strip())
-    out = []
-    for a in data.get("articles", []) or []:
-        try:
-            pub = datetime.strptime(a.get("seendate", ""), "%Y%m%dT%H%M%SZ").replace(tzinfo=UTC)
-        except ValueError:
-            pub = None
-        out.append({
-            "title": a.get("title", ""),
-            "link": a.get("url", ""),
-            "host": host_of(a.get("url", "")),
-            "published": pub,
-            "snippet": "",
-            "origin": "gdelt",
         })
     return out
 
@@ -391,7 +361,7 @@ def main():
             except Exception as ex:  # noqa: BLE001
                 log(f"RSS  {s['name']} failed: {ex}")
 
-    # Google News + GDELT (keyword search itself is Check 1)
+    # Google News (the keyword search itself is Check 1)
     for s in sources:
         for domain in s["domains"]:
             for chunk in chunks:
@@ -402,28 +372,26 @@ def main():
                 except Exception as ex:  # noqa: BLE001
                     log(f"GNEWS {domain} failed: {ex}")
                 time.sleep(GOOGLE_PAUSE)
-            try:
-                items = fetch_gdelt(domain, chunks[0], since)
-                raw.extend(items)
-                log(f"GDELT {domain}: {len(items)}")
-            except Exception as ex:  # noqa: BLE001
-                log(f"GDELT {domain} failed: {ex}")
-            time.sleep(GDELT_PAUSE)
 
     # Normalize, whitelist, window, de-duplicate
     candidates = {}
+    drops = {"empty": 0, "not_approved_source": 0, "outside_window": 0, "already_processed": 0}
     for it in raw:
         if not it.get("title") or not it.get("link"):
+            drops["empty"] += 1
             continue
         name = it.get("source") or source_for(it.get("host", ""), src_idx)
         if not name:
+            drops["not_approved_source"] += 1
             continue
         it["source"] = name
         it["published"] = it.get("published") or now
         if it["published"] < since or it["published"] > now + timedelta(hours=1):
+            drops["outside_window"] += 1
             continue
         key = f"{name}|{norm_title(it['title'])}"
         if key in seen or it["link"] in known_links:
+            drops["already_processed"] += 1
             continue
         it["key"] = key
         prev = candidates.get(key)
@@ -432,6 +400,7 @@ def main():
                 it["snippet"] = prev.get("snippet", "")
             candidates[key] = it
 
+    log(f"Fetched {len(raw)} raw items | dropped: {drops}")
     items = sorted(candidates.values(), key=lambda x: x["published"])[:MAX_CANDIDATES]
     log(f"New candidates after Check 1: {len(items)}")
     if not items:
