@@ -47,6 +47,8 @@ MATCH_DAYS = 7           # compare new items with stories from the last 7 days
 MAX_EXISTING = 400       # max existing stories sent to Claude per call
 MAX_CANDIDATES = 1500    # safety cap per run
 GOOGLE_PAUSE = 1.0       # seconds between Google News requests
+GOOGLE_QUERY_LEN = 80    # short OR-groups: long queries make Google ignore site:
+SKIP_TITLE_RE = re.compile(r"^\s*(watch|video|live|listen|photos?)\s*[:|]|live updates|week in politics", re.I)
 
 
 def log(*args):
@@ -166,9 +168,8 @@ def keyword_regex(terms):
 
 # ------------------------------------------------------------------ fetchers
 
-def fetch_google(domain, query_chunk, since):
-    after = (since - timedelta(days=1)).strftime("%Y-%m-%d")
-    q = f"{query_chunk} site:{domain} after:{after}"
+def fetch_google(domain, query_chunk, days):
+    q = f"site:{domain} {query_chunk} when:{days}d"
     url = ("https://news.google.com/rss/search?q=" + quote(q)
            + "&hl=en-US&gl=US&ceid=US:en")
     r = requests.get(url, headers=HEADERS, timeout=30)
@@ -178,7 +179,7 @@ def fetch_google(domain, query_chunk, since):
     for e in feedparser.parse(r.content).entries:
         src = e.get("source") or {}
         src_title = src.get("title", "") if isinstance(src, dict) else ""
-        src_href = src.get("href", "") if isinstance(src, dict) else ""
+        src_href = (src.get("href") or src.get("url") or "") if isinstance(src, dict) else ""
         title = e.get("title", "")
         suffix = " - " + src_title
         if src_title and title.endswith(suffix):
@@ -232,12 +233,20 @@ def fetch_description(url):
 
 # ------------------------------------------------------------------ Claude
 
-SYSTEM_PROMPT = """You screen items for a monitoring page about the 2026 United States elections, used by policy analysts.
+SYSTEM_PROMPT = """You screen items for a monitoring page about the 2026 United States elections, used by senior policy analysts. Precision matters more than volume.
 
 For every CANDIDATE decide:
-1. keep: true only if the item is primarily about US elections: the 2026 midterms, Senate/House/governor/state races, primaries, candidates and campaigns, polling, voters and turnout, voting rules and election administration, redistricting, election results, or early positioning for the 2028 presidential race. Set keep=false when elections are only mentioned in passing, when it is about a non-US election, or when it is a live-blog fragment, video or photo listing, newsletter digest, quiz, or other low-value item. Opinion and analysis pieces are kept only when they offer substantive analysis (a clear argument backed by data, evidence or expert insight), not thin commentary.
-2. match: if the item covers the same specific story as one of the EXISTING STORIES, return that story's id. Same story means the same specific event, development, announcement, poll release or claim, not merely the same broad topic or the same race.
-3. group: if match is null, give candidates in this batch that cover the same specific story the same short label (for example "g1"); otherwise null.
+1. keep: true only if the item is primarily about US elections: the 2026 midterms, Senate/House/governor/state races, primaries, candidates and campaigns, polling, voters and turnout, voting rules and election administration, redistricting, election-related court rulings, election results, or early positioning for the 2028 presidential race.
+   Set keep=false for:
+   - items where elections are only mentioned in passing, or policy/legislation stories not framed around the election;
+   - non-US elections;
+   - videos, live blogs, podcasts, photo galleries, newsletters, weekly roundups or "week in politics" digests;
+   - celebrity endorsements and entertainment angles;
+   - pieces built around a single quote, soundbite or campaign attack line with no new facts;
+   - thin partisan hit pieces (e.g. a candidate "blasts" or "slams" an opponent) with no substantive reporting.
+   Opinion and analysis pieces are kept only when they offer substantive analysis (a clear argument backed by data, evidence or expert insight).
+2. match: if the item reports the same specific story as one of the EXISTING STORIES, return that story's id. Same story means the same specific event, ruling, announcement, poll release or revelation. Different articles about the same race, the same candidate, polling in general, or the same broad theme are DIFFERENT stories. When in doubt, return null.
+3. group: if match is null, give candidates in this batch that report the same specific story the same short label (for example "g1"); otherwise null. Apply the same strict rule as for match.
 
 Judge from the title, source and snippet. Return JSON only, no prose, in exactly this shape:
 {"results":[{"i":0,"keep":true,"match":null,"group":"g1"}]}
@@ -335,12 +344,13 @@ def main():
     src_idx = build_source_index(sources)
     terms = [t for t in kw.get("search_terms", []) + kw.get("names", []) if t.strip()]
     kw_re = keyword_regex(terms)
-    chunks = term_chunks(terms)
+    google_chunks = term_chunks(terms, max_len=GOOGLE_QUERY_LEN)
 
     now = datetime.now(UTC)
     backfill = datetime.fromisoformat(kw["backfill_start"]).replace(tzinfo=RIYADH).astimezone(UTC)
     since = max(backfill, now - timedelta(days=int(kw.get("lookback_days", 5))))
-    log(f"Model: {MODEL} | window starts {iso(since)} | {len(terms)} terms, {len(chunks)} query groups")
+    days = max(1, int((now - since).total_seconds() // 86400) + 1)
+    log(f"Model: {MODEL} | window starts {iso(since)} | {len(terms)} terms, {len(google_chunks)} query groups per site")
 
     seen = {r["key"] for r in sb_all("election_seen", {
         "select": "key", "created_at": f"gte.{iso(now - timedelta(days=30))}"})}
@@ -364,21 +374,27 @@ def main():
     # Google News (the keyword search itself is Check 1)
     for s in sources:
         for domain in s["domains"]:
-            for chunk in chunks:
+            got = on_site = 0
+            for chunk in google_chunks:
                 try:
-                    items = fetch_google(domain, chunk, since)
+                    items = fetch_google(domain, chunk, days)
                     raw.extend(items)
-                    log(f"GNEWS {domain}: {len(items)}")
+                    got += len(items)
+                    on_site += sum(1 for it in items if source_for(it["host"], src_idx) == s["name"])
                 except Exception as ex:  # noqa: BLE001
                     log(f"GNEWS {domain} failed: {ex}")
                 time.sleep(GOOGLE_PAUSE)
+            log(f"GNEWS {domain}: {got} results, {on_site} from this source")
 
     # Normalize, whitelist, window, de-duplicate
     candidates = {}
-    drops = {"empty": 0, "not_approved_source": 0, "outside_window": 0, "already_processed": 0}
+    drops = {"empty_or_video": 0, "not_approved_source": 0, "outside_window": 0, "already_processed": 0}
     for it in raw:
         if not it.get("title") or not it.get("link"):
-            drops["empty"] += 1
+            drops["empty_or_video"] += 1
+            continue
+        if SKIP_TITLE_RE.search(it["title"]):
+            drops["empty_or_video"] += 1
             continue
         name = it.get("source") or source_for(it.get("host", ""), src_idx)
         if not name:
