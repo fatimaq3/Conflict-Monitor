@@ -24,7 +24,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependencies
-        run: pip install -r scraper/requirements.txt
+        run: pip install -r requirements.txt
 
       - name: Run scraper
         env:
@@ -32,4 +32,4 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL }}
-        run: python scraper/elections_scraper.py
+        run: python elections_scraper.py
