@@ -1,0 +1,32 @@
+{
+  "_note": "search_terms: broad election terms. names: add people to track later, one name per entry, e.g. \"John Smith\". backfill_start: first-run start date (Riyadh time). lookback_days: how far back each run searches; duplicates are skipped automatically.",
+  "backfill_start": "2026-09-23",
+  "lookback_days": 5,
+  "search_terms": [
+    "election",
+    "elections",
+    "midterm",
+    "midterms",
+    "ballot",
+    "voters",
+    "voting",
+    "polls",
+    "primary",
+    "campaign",
+    "Senate race",
+    "House race",
+    "governor race",
+    "gubernatorial",
+    "Congress",
+    "Republicans",
+    "Democrats",
+    "GOP",
+    "redistricting",
+    "turnout",
+    "electoral",
+    "early voting",
+    "swing state",
+    "battleground"
+  ],
+  "names": []
+}

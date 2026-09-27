@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>عين - انتخابات 2026</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@500;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/dist/tabler-icons.min.css">
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root{
+    --green:#286140;
+    --green-dark:#1c4a30;
+    --gold:#B58500;
+    --bronze:#916E2C;
+    --bronze-dark:#785B22;
+    --navy:#1B365D;
+    --brown:#6E6259;
+    --teal:#6BCABA;
+    --maroon:#952E46;
+    --gray:#C7C8CA;
+    --white:#FFFFFF;
+    --soft-white:#F2F2F2;
+    --black:#5A5959;
+    --soft-black:#707070;
+    --bg:#F3EFE4;
+    --card:#FFFFFF;
+    --border:#E4DFD0;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);font-family:'Cairo','Segoe UI',Tahoma,Arial,sans-serif;color:var(--black);}
+  .topbar{
+    background:linear-gradient(135deg, var(--bronze), var(--bronze-dark));
+    color:var(--white);
+    padding:18px 32px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    flex-wrap:wrap;
+  }
+  .topbar h1{margin:0;font-size:32px;font-weight:800;letter-spacing:1.5px;}
+  .brand-group{display:flex;align-items:center;gap:22px;flex-wrap:wrap;}
+  .nav-tabs{display:flex;gap:4px;background:rgba(255,255,255,.12);padding:4px;border-radius:12px;}
+  .nav-tab{
+    color:#F2E7D2;
+    text-decoration:none;
+    font-size:13.5px;
+    font-weight:700;
+    padding:6px 14px;
+    border-radius:9px;
+    white-space:nowrap;
+    transition:background .15s,color .15s;
+  }
+  .nav-tab:hover{background:rgba(255,255,255,.14);color:#fff;}
+  .nav-tab.active{background:#fff;color:var(--bronze-dark);}
+  .nav-tab:focus-visible{outline:2px solid #fff;outline-offset:2px;}
+  .topbar .badge-day{
+    background:rgba(255,255,255,.15);
+    border-radius:20px;
+    padding:6px 16px;
+    font-size:13px;
+    display:flex;
+    align-items:center;
+    gap:6px;
+  }
+
+  .wrap{max-width:1140px;margin:0 auto;padding:20px 20px 60px;}
+
+  .stats{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(110px,1fr));
+    gap:10px;
+    margin-bottom:18px;
+  }
+  .stat{
+    background:var(--card);
+    border:1px solid var(--border);
+    border-radius:12px;
+    padding:12px 8px;
+    text-align:center;
+  }
+  .stat .n{font-size:21px;font-weight:700;color:var(--navy);}
+  .stat .l{font-size:11px;color:var(--soft-black);margin-top:3px;}
+
+  .stat-hero{
+    background:linear-gradient(135deg, var(--bronze), var(--bronze-dark));
+    border-radius:14px;
+    padding:16px 20px;
+    margin-bottom:12px;
+    display:flex;
+    align-items:center;
+    gap:14px;
+  }
+  .stat-hero i{font-size:26px;color:#F2D9A8;}
+  .stat-hero .n{font-size:34px;font-weight:800;color:#fff;line-height:1;}
+  .stat-hero .l{font-size:13px;color:#F2E7D2;margin-top:2px;}
+
+  .toolbar-card{
+    background:var(--card);
+    border:1px solid var(--border);
+    border-radius:12px;
+    padding:10px 14px;
+    margin-bottom:14px;
+    display:flex;
+    gap:10px;
+    flex-wrap:wrap;
+    align-items:flex-end;
+  }
+  .last-update{font-size:11.5px;color:var(--soft-black);display:inline-flex;align-items:center;gap:4px;padding-bottom:8px;}
+  .last-update i{color:var(--gold);font-size:14px;}
+
+  .card{
+    background:var(--card);
+    border:1px solid var(--border);
+    border-radius:14px;
+    padding:16px;
+    margin-bottom:16px;
+  }
+
+  .field{display:flex;flex-direction:column;gap:3px;}
+  .field label{font-size:10.5px;color:var(--soft-black);}
+  select{
+    padding:7px 10px;
+    border:1px solid var(--border);
+    border-radius:8px;
+    font-size:12.5px;
+    font-family:inherit;
+    background:#fff;
+    color:var(--black);
+  }
+  select:focus{outline:none;border-color:var(--green);}
+  .icon-btn{
+    border:1px solid var(--border);
+    background:#fff;
+    color:var(--soft-black);
+    border-radius:8px;
+    width:34px;
+    height:34px;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    cursor:pointer;
+    font-size:15px;
+    position:relative;
+  }
+  .icon-btn:hover{background:var(--soft-white);}
+  .icon-btn:focus-visible,.verify-badge:focus-visible{outline:2px solid var(--green);outline-offset:2px;}
+
+  .popover{
+    position:absolute;
+    top:calc(100% + 6px);
+    left:0;
+    background:#fff;
+    border:1px solid var(--border);
+    border-radius:10px;
+    box-shadow:0 6px 20px rgba(0,0,0,.12);
+    padding:8px;
+    z-index:30;
+    min-width:150px;
+  }
+  .popover button.opt{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    width:100%;
+    background:none;
+    border:none;
+    text-align:right;
+    padding:7px 8px;
+    border-radius:7px;
+    font-size:12.5px;
+    font-family:inherit;
+    color:var(--black);
+    cursor:pointer;
+  }
+  .popover button.opt:hover{background:var(--soft-white);}
+
+  table{width:100%;border-collapse:collapse;font-size:12px;}
+  thead th{
+    background:var(--soft-white);
+    color:var(--soft-black);
+    font-weight:600;
+    text-align:right;
+    padding:8px 8px;
+    border-bottom:1px solid var(--border);
+    white-space:nowrap;
+  }
+  tbody td{padding:8px 8px;border-bottom:1px solid var(--border);vertical-align:top;}
+  tbody tr:hover{background:#FCFBF8;}
+
+  .title-cell{max-width:420px;}
+  .title-text{font-weight:600;color:var(--black);line-height:1.5;text-align:right;}
+  .source-cell{font-size:11.5px;color:var(--brown);white-space:nowrap;}
+  .date-cell{white-space:nowrap;}
+  a.article-link{color:var(--green);text-decoration:none;font-size:11px;display:inline-flex;align-items:center;gap:3px;white-space:nowrap;}
+  a.article-link:hover{text-decoration:underline;}
+
+  .verify-cell{position:relative;white-space:nowrap;}
+  .verify-badge{
+    border:none;
+    border-radius:20px;
+    padding:4px 11px;
+    font-size:10.5px;
+    font-weight:700;
+    font-family:inherit;
+    cursor:pointer;
+    display:inline-flex;
+    align-items:center;
+    gap:5px;
+  }
+  .verify-badge i{font-size:12px;}
+  .src-popover{
+    position:absolute;
+    top:calc(100% + 4px);
+    right:0;
+    background:#fff;
+    border:1px solid var(--border);
+    border-radius:10px;
+    box-shadow:0 6px 20px rgba(0,0,0,.14);
+    padding:10px;
+    z-index:30;
+    width:300px;
+    max-height:320px;
+    overflow-y:auto;
+    white-space:normal;
+  }
+  .src-popover .pop-head{font-size:11px;font-weight:700;color:var(--soft-black);margin-bottom:6px;}
+  .src-item{padding:7px 0;border-top:1px solid var(--border);}
+  .src-item:first-of-type{border-top:none;}
+  .src-row{display:flex;align-items:center;justify-content:space-between;gap:8px;}
+  .src-name{font-size:11.5px;font-weight:700;color:var(--brown);}
+  .src-time{font-size:10.5px;color:var(--soft-black);white-space:nowrap;}
+  .src-title{font-size:11px;color:var(--black);margin:3px 0 4px;line-height:1.45;text-align:right;}
+
+  .empty{text-align:center;padding:30px 10px;color:var(--soft-black);font-size:13px;}
+  .empty i{font-size:24px;color:var(--gray);display:block;margin-bottom:8px;}
+
+  @media (max-width:640px){
+    .topbar{padding:14px 16px;}
+    .topbar h1{font-size:26px;}
+    .brand-group{gap:12px;}
+    .wrap{padding:14px 12px 40px;}
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand-group">
+    <h1>عين</h1>
+    <nav class="nav-tabs" aria-label="أقسام المنصة">
+      <a class="nav-tab" href="index.html">الأزمة الراهنة</a>
+      <a class="nav-tab active" href="elections.html" aria-current="page">انتخابات 2026</a>
+    </nav>
+  </div>
+  <div class="badge-day" id="today-badge"><i class="ti ti-calendar"></i><span></span></div>
+</div>
+
+<div class="wrap">
+
+  <div class="stat-hero" id="stats-hero"></div>
+  <div class="stats" id="stats"></div>
+
+  <div class="toolbar-card">
+    <div class="field">
+      <label for="f-week">الأسبوع</label>
+      <select id="f-week"></select>
+    </div>
+
+    <button class="icon-btn" id="btn-refresh" title="تحديث" aria-label="تحديث"><i class="ti ti-refresh"></i></button>
+
+    <span class="last-update" id="last-update"></span>
+
+    <div style="position:relative;margin-right:auto;">
+      <button class="icon-btn" id="btn-export" title="تصدير" aria-label="تصدير"><i class="ti ti-download"></i></button>
+      <div class="popover" id="export-popover" style="display:none;">
+        <button class="opt" id="export-excel"><i class="ti ti-file-spreadsheet"></i> تصدير Excel</button>
+        <button class="opt" id="export-pdf"><i class="ti ti-file-type-pdf"></i> تصدير PDF</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div style="overflow-x:auto;">
+      <table>
+        <thead>
+          <tr>
+            <th>التحقق</th>
+            <th id="th-date" style="cursor:pointer;user-select:none;">التاريخ <i class="ti ti-arrow-down" id="date-sort-icon" style="font-size:11px;"></i></th>
+            <th>العنوان</th>
+            <th>المصدر</th>
+            <th>الرابط</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+      <div class="empty" id="empty-msg" style="display:none;"></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  const SUPABASE_URL = 'https://tkmatxmnmphmuykhywtv.supabase.co';
+  const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRrbWF0eG1ubXBobXV5a2h5d3R2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA0MDM1NDgsImV4cCI6MjA5NTk3OTU0OH0.NUwIIhKfqILel1a12HL2NYS-R-iky0E2U7o9tlgtKac';
+
+  const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  let stories = [];
+  let dateSortOrder = 'desc';
+  let loadedOnce = false;
+
+  var VERIFY_LEVELS = [
+    { key: 1, label: 'مصدر واحد', bg: '#EFEBE6', color: '#6E6259', argb: 'FFEFEBE6', font: 'FF6E6259' },
+    { key: 2, label: 'مصدران', bg: '#FBF1DC', color: '#7A5F00', argb: 'FFFBF1DC', font: 'FF7A5F00' },
+    { key: 3, label: '3+ مصادر', bg: '#E4EFE8', color: '#1c4a30', argb: 'FFE4EFE8', font: 'FF1C4A30' }
+  ];
+
+  function verifyLevel(count){
+    var c = Number(count) || 1;
+    if(c >= 3) return VERIFY_LEVELS[2];
+    if(c === 2) return VERIFY_LEVELS[1];
+    return VERIFY_LEVELS[0];
+  }
+
+  function escapeHtml(s){
+    return String(s || '').replace(/[&<>"']/g, function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+    });
+  }
+
+  function formatDateDisplay(iso){
+    if(!iso) return '';
+    var parts = String(iso).slice(0, 10).split('-');
+    if(parts.length !== 3) return iso;
+    return parts[0] + '/' + parts[1] + '/' + parts[2];
+  }
+
+  var riyadhFmt = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Asia/Riyadh', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false
+  });
+
+  function formatRiyadh(ts){
+    if(!ts) return '';
+    var p = {};
+    riyadhFmt.formatToParts(new Date(ts)).forEach(function(x){ p[x.type] = x.value; });
+    return p.year + '/' + p.month + '/' + p.day + ' ' + p.hour + ':' + p.minute;
+  }
+
+  function todayISO(){
+    var p = {};
+    riyadhFmt.formatToParts(new Date()).forEach(function(x){ p[x.type] = x.value; });
+    return p.year + '-' + p.month + '-' + p.day;
+  }
+
+  document.querySelector('#today-badge span').textContent = formatDateDisplay(todayISO());
+
+  var WEEK_ANCHOR = '2026-07-25';
+  var WEEK_COUNT = 20;
+
+  function addDaysISO(iso, days){
+    var parts = iso.split('-').map(Number);
+    var d = new Date(Date.UTC(parts[0], parts[1]-1, parts[2]));
+    d.setUTCDate(d.getUTCDate() + days);
+    return d.getUTCFullYear() + '-' + String(d.getUTCMonth()+1).padStart(2,'0') + '-' + String(d.getUTCDate()).padStart(2,'0');
+  }
+
+  function formatEnLabel(iso){
+    var parts = iso.split('-').map(Number);
+    var d = new Date(Date.UTC(parts[0], parts[1]-1, parts[2]));
+    return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', timeZone: 'UTC' });
+  }
+
+  function buildWeeks(){
+    var weeks = [];
+    var start = WEEK_ANCHOR;
+    for(var i = 0; i < WEEK_COUNT; i++){
+      var end = addDaysISO(start, 7);
+      weeks.push({ start: start, end: end, label: formatEnLabel(start) + ' - ' + formatEnLabel(end) });
+      start = end;
+    }
+    return weeks;
+  }
+
+  var WEEKS = buildWeeks();
+
+  (function fillWeekSelect(){
+    var sel = document.getElementById('f-week');
+    var opts = ['<option value="">كل الأسابيع</option>'];
+    WEEKS.forEach(function(w, i){
+      opts.push('<option value="'+i+'">'+w.label+'</option>');
+    });
+    sel.innerHTML = opts.join('');
+  })();
+
+  function showEmpty(html){
+    var el = document.getElementById('empty-msg');
+    el.style.display = 'block';
+    el.innerHTML = html;
+  }
+
+  async function loadStories(){
+    var all = [];
+    var from = 0;
+    var size = 1000;
+    while(true){
+      const { data, error } = await sb
+        .from('election_stories')
+        .select('id,story_date,title,source,link,published_at,source_count,updated_at,election_articles(id,title,source,link,published_at)')
+        .order('published_at', { ascending: false })
+        .range(from, from + size - 1);
+      if(error){
+        console.error(error);
+        document.getElementById('tbody').innerHTML = '';
+        showEmpty('<i class="ti ti-alert-triangle"></i>تعذّر جلب البيانات، يُرجى التحقق من إعداد جداول الانتخابات في Supabase');
+        return;
+      }
+      all = all.concat(data || []);
+      if(!data || data.length < size) break;
+      from += size;
+    }
+    stories = all.map(function(s){
+      var arts = Array.isArray(s.election_articles) ? s.election_articles.slice() : [];
+      arts.sort(function(a, b){ return (a.published_at || '').localeCompare(b.published_at || ''); });
+      s.articles = arts;
+      return s;
+    });
+    loadedOnce = true;
+    render();
+  }
+
+  function getFiltered(){
+    var weekIdx = document.getElementById('f-week').value;
+    var rows = stories.filter(function(s){
+      if(weekIdx !== ''){
+        var w = WEEKS[Number(weekIdx)];
+        if(!(s.story_date >= w.start && s.story_date <= w.end)) return false;
+      }
+      return true;
+    });
+    rows.sort(function(x, y){
+      var dx = x.published_at || '';
+      var dy = y.published_at || '';
+      return dateSortOrder === 'asc' ? dx.localeCompare(dy) : dy.localeCompare(dx);
+    });
+    return rows;
+  }
+
+  function renderStats(rows){
+    document.getElementById('stats-hero').innerHTML =
+      '<i class="ti ti-chart-bar"></i><div><div class="n">'+rows.length+'</div><div class="l">إجمالي المواضيع</div></div>';
+
+    var counts = [0, 0, 0];
+    rows.forEach(function(s){ counts[verifyLevel(s.source_count).key - 1]++; });
+
+    document.getElementById('stats').innerHTML = VERIFY_LEVELS.map(function(v, i){
+      return '<div class="stat"><div class="n" style="color:'+v.color+';">'+counts[i]+'</div><div class="l">'+v.label+'</div></div>';
+    }).join('');
+
+    var latest = stories.reduce(function(m, s){ return (s.updated_at || '') > m ? s.updated_at : m; }, '');
+    document.getElementById('last-update').innerHTML = latest
+      ? '<i class="ti ti-clock"></i>آخر تحديث للبيانات: ' + formatRiyadh(latest)
+      : '';
+  }
+
+  function closeAllPopovers(){
+    Array.prototype.forEach.call(document.querySelectorAll('.src-popover'), function(p){ p.style.display = 'none'; });
+    document.getElementById('export-popover').style.display = 'none';
+  }
+
+  function anyPopoverOpen(){
+    return Array.prototype.some.call(document.querySelectorAll('.src-popover, #export-popover'), function(p){
+      return p.style.display === 'block';
+    });
+  }
+
+  document.addEventListener('click', function(e){
+    if(!e.target.closest('.verify-cell') && !e.target.closest('#btn-export') && !e.target.closest('#export-popover')){
+      closeAllPopovers();
+    }
+  });
+  document.addEventListener('keydown', function(e){ if(e.key === 'Escape') closeAllPopovers(); });
+
+  function renderTable(rows){
+    var tbody = document.getElementById('tbody');
+    if(!rows.length){
+      tbody.innerHTML = '';
+      showEmpty(loadedOnce && stories.length
+        ? '<i class="ti ti-inbox"></i>لا توجد مواضيع في هذا الأسبوع، يُرجى اختيار أسبوع آخر'
+        : '<i class="ti ti-inbox"></i>لا توجد مواضيع بعد، تُحدَّث البيانات تلقائيًا كل ساعتين');
+      return;
+    }
+    document.getElementById('empty-msg').style.display = 'none';
+
+    tbody.innerHTML = rows.map(function(s){
+      var v = verifyLevel(s.source_count);
+      var items = s.articles.map(function(a){
+        return '<div class="src-item">'+
+          '<div class="src-row"><span class="src-name">'+escapeHtml(a.source)+'</span><span class="src-time">'+formatRiyadh(a.published_at)+'</span></div>'+
+          '<div class="src-title" dir="auto">'+escapeHtml(a.title)+'</div>'+
+          '<a class="article-link" href="'+escapeHtml(a.link)+'" target="_blank" rel="noopener"><i class="ti ti-external-link"></i>فتح الرابط</a>'+
+        '</div>';
+      }).join('');
+      return '<tr>'+
+        '<td class="verify-cell">'+
+          '<button class="verify-badge" data-id="'+s.id+'" aria-expanded="false" style="background:'+v.bg+';color:'+v.color+';">'+
+            '<i class="ti ti-circle-check"></i>'+v.label+'</button>'+
+          '<div class="src-popover" id="src-pop-'+s.id+'" style="display:none;">'+
+            '<div class="pop-head">المصادر الناقلة ('+s.articles.length+')</div>'+items+
+          '</div>'+
+        '</td>'+
+        '<td class="date-cell">'+formatDateDisplay(s.story_date)+'</td>'+
+        '<td class="title-cell"><div class="title-text" dir="auto">'+escapeHtml(s.title)+'</div></td>'+
+        '<td class="source-cell">'+escapeHtml(s.source)+'</td>'+
+        '<td><a class="article-link" href="'+escapeHtml(s.link)+'" target="_blank" rel="noopener"><i class="ti ti-external-link"></i>فتح الرابط</a></td>'+
+      '</tr>';
+    }).join('');
+
+    Array.prototype.forEach.call(document.querySelectorAll('.verify-badge'), function(btn){
+      btn.onclick = function(e){
+        e.stopPropagation();
+        var pop = document.getElementById('src-pop-' + btn.dataset.id);
+        var isOpen = pop.style.display === 'block';
+        closeAllPopovers();
+        Array.prototype.forEach.call(document.querySelectorAll('.verify-badge'), function(b){ b.setAttribute('aria-expanded', 'false'); });
+        if(!isOpen){
+          pop.style.display = 'block';
+          btn.setAttribute('aria-expanded', 'true');
+        }
+      };
+    });
+  }
+
+  function render(){
+    var rows = getFiltered();
+    renderStats(rows);
+    renderTable(rows);
+  }
+
+  document.getElementById('th-date').onclick = function(){
+    dateSortOrder = dateSortOrder === 'desc' ? 'asc' : 'desc';
+    document.getElementById('date-sort-icon').className = dateSortOrder === 'desc' ? 'ti ti-arrow-down' : 'ti ti-arrow-up';
+    render();
+  };
+  document.getElementById('f-week').onchange = render;
+  document.getElementById('btn-refresh').onclick = loadStories;
+
+  document.getElementById('btn-export').onclick = function(e){
+    e.stopPropagation();
+    var pop = document.getElementById('export-popover');
+    var isOpen = pop.style.display === 'block';
+    closeAllPopovers();
+    pop.style.display = isOpen ? 'none' : 'block';
+  };
+
+  function sourcesList(s){
+    var seen = {};
+    return s.articles.map(function(a){ return a.source; }).filter(function(n){
+      if(seen[n]) return false;
+      seen[n] = true;
+      return true;
+    }).join('، ');
+  }
+
+  document.getElementById('export-excel').onclick = async function(){
+    var rows = getFiltered();
+    var headers = ['التحقق','التاريخ','العنوان','المصدر','الرابط','المصادر الناقلة'];
+    var widths = [14, 13, 60, 24, 36, 40];
+
+    var wb = new ExcelJS.Workbook();
+    var ws = wb.addWorksheet('انتخابات 2026', { views: [{ rightToLeft: true, state: 'frozen', ySplit: 1 }] });
+    ws.columns = headers.map(function(h, i){ return { header: h, key: h, width: widths[i] }; });
+
+    var headerRow = ws.getRow(1);
+    headerRow.eachCell(function(cell){
+      cell.font = { name: 'Arial', bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF916E2C' } };
+      cell.alignment = { horizontal: 'center', vertical: 'middle' };
+    });
+    headerRow.height = 22;
+
+    rows.forEach(function(s, idx){
+      var v = verifyLevel(s.source_count);
+      var row = ws.addRow([v.label, formatDateDisplay(s.story_date), s.title, s.source, s.link, sourcesList(s)]);
+      row.eachCell(function(cell){
+        cell.alignment = { horizontal: 'right', vertical: 'middle', wrapText: true };
+        cell.font = { name: 'Arial', size: 10.5 };
+        if((idx + 1) % 2 === 0){
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF7F5EF' } };
+        }
+      });
+      var vc = row.getCell(1);
+      vc.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: v.argb } };
+      vc.font = { name: 'Arial', size: 10.5, bold: true, color: { argb: v.font } };
+      vc.alignment = { horizontal: 'center', vertical: 'middle' };
+      if(s.link){
+        row.getCell(5).value = { text: s.link, hyperlink: s.link };
+        row.getCell(5).font = { name: 'Arial', size: 10, color: { argb: 'FF286140' }, underline: true };
+      }
+    });
+
+    var buffer = await wb.xlsx.writeBuffer();
+    var blob = new Blob([buffer], { type: 'application/octet-stream' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'عين-انتخابات-2026.xlsx';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    closeAllPopovers();
+  };
+
+  document.getElementById('export-pdf').onclick = function(){
+    var rows = getFiltered();
+    var weekIdx = document.getElementById('f-week').value;
+    var weekLabel = weekIdx !== '' ? WEEKS[Number(weekIdx)].label : 'كل الأسابيع';
+    var exportDate = formatDateDisplay(todayISO());
+
+    var counts = [0, 0, 0];
+    rows.forEach(function(s){ counts[verifyLevel(s.source_count).key - 1]++; });
+
+    var statCards = '<div class="pdf-stat total"><div class="n">'+rows.length+'</div><div class="l">إجمالي المواضيع</div></div>' +
+      VERIFY_LEVELS.map(function(v, i){
+        return '<div class="pdf-stat" style="background:'+v.bg+';"><div class="n" style="color:'+v.color+';">'+counts[i]+'</div><div class="l" style="color:'+v.color+';">'+v.label+'</div></div>';
+      }).join('');
+
+    var tableRows = rows.map(function(s){
+      var v = verifyLevel(s.source_count);
+      return '<tr>'+
+        '<td><span class="pdf-badge" style="background:'+v.bg+';color:'+v.color+';">'+v.label+'</span></td>'+
+        '<td class="c-date">'+formatDateDisplay(s.story_date)+'</td>'+
+        '<td class="c-title" dir="auto">'+escapeHtml(s.title)+'</td>'+
+        '<td>'+escapeHtml(s.source)+'</td>'+
+        '<td class="c-srcs">'+escapeHtml(sourcesList(s))+'</td>'+
+      '</tr>';
+    }).join('');
+
+    var html = '<!DOCTYPE html><html lang="ar" dir="rtl"><head><meta charset="UTF-8"><title>عين - انتخابات 2026</title><style>'+
+      '@page{ size:A4; margin:16mm 14mm; }'+
+      '*{box-sizing:border-box;}'+
+      'body{margin:0;font-family:Tahoma,"Segoe UI",Arial,sans-serif;color:#2B2B29;}'+
+      '.cover{height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;background:#286140;color:#fff;text-align:center;page-break-after:always;}'+
+      '.cover .logo{font-size:64px;font-weight:800;letter-spacing:2px;}'+
+      '.cover .gold-line{width:70px;height:4px;background:#B58500;border-radius:4px;margin:18px 0;}'+
+      '.cover .subtitle{font-size:18px;font-weight:600;color:#F2F2F2;margin-bottom:36px;}'+
+      '.cover .meta{font-size:13px;color:#D8E5DC;line-height:2;}'+
+      '.cover .meta b{color:#fff;}'+
+      '.page-head{display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid #286140;padding-bottom:10px;margin-bottom:16px;}'+
+      '.page-head .brand{font-size:20px;font-weight:800;color:#286140;}'+
+      '.page-head .date{font-size:11px;color:#707070;}'+
+      '.pdf-stats{display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap;}'+
+      '.pdf-stat{flex:1;min-width:80px;background:#F2F2F2;border-radius:8px;padding:10px 6px;text-align:center;}'+
+      '.pdf-stat.total{background:#E4DFD0;}'+
+      '.pdf-stat .n{font-size:18px;font-weight:800;color:#1B365D;}'+
+      '.pdf-stat .l{font-size:9.5px;color:#5A5959;margin-top:2px;}'+
+      'table{width:100%;border-collapse:collapse;font-size:10px;}'+
+      'thead{display:table-header-group;}'+
+      'tr{page-break-inside:avoid;}'+
+      'th{background:#286140;color:#fff;padding:7px 6px;text-align:right;font-weight:700;}'+
+      'td{padding:6px 6px;border-bottom:1px solid #E4DFD0;text-align:right;vertical-align:top;}'+
+      'tbody tr:nth-child(even){background:#FAF9F6;}'+
+      '.c-date{white-space:nowrap;color:#707070;}'+
+      '.c-title{max-width:230px;font-weight:700;color:#2B2B29;}'+
+      '.c-srcs{font-size:9px;color:#6E6259;max-width:150px;}'+
+      '.pdf-badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:9px;font-weight:700;white-space:nowrap;}'+
+      '.footer-note{margin-top:14px;font-size:9px;color:#B0ACA0;text-align:center;}'+
+      '</style></head><body>'+
+      '<div class="cover">'+
+        '<div class="logo">عين</div>'+
+        '<div class="gold-line"></div>'+
+        '<div class="subtitle">انتخابات 2026 - تقرير التغطية الإعلامية</div>'+
+        '<div class="meta">'+
+          '<div><b>الأسبوع:</b> '+escapeHtml(weekLabel)+'</div>'+
+          '<div><b>تاريخ التصدير:</b> '+escapeHtml(exportDate)+'</div>'+
+        '</div>'+
+      '</div>'+
+      '<div class="page-head"><span class="brand">عين - انتخابات 2026</span><span class="date">تاريخ التصدير: '+escapeHtml(exportDate)+'</span></div>'+
+      '<div class="pdf-stats">'+statCards+'</div>'+
+      '<table><thead><tr>'+
+        '<th>التحقق</th><th>التاريخ</th><th>العنوان</th><th>المصدر</th><th>المصادر الناقلة</th>'+
+      '</tr></thead><tbody>'+tableRows+'</tbody></table>'+
+      '<div class="footer-note">تم إنشاء هذا التقرير تلقائيًا من منصة عين</div>'+
+      '</body></html>';
+
+    var w = window.open('', '_blank');
+    w.document.write(html);
+    w.document.close();
+    setTimeout(function(){ w.print(); }, 400);
+    closeAllPopovers();
+  };
+
+  loadStories();
+  setInterval(function(){ if(!anyPopoverOpen()) loadStories(); }, 60000);
+</script>
+</body>
+</html>

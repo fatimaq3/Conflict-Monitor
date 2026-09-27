@@ -39,8 +39,30 @@
     display:flex;
     align-items:center;
     justify-content:space-between;
+    gap:12px;
+    flex-wrap:wrap;
   }
   .topbar h1{margin:0;font-size:32px;font-weight:800;letter-spacing:1.5px;}
+  .brand-group{display:flex;align-items:center;gap:22px;flex-wrap:wrap;}
+  .nav-tabs{display:flex;gap:4px;background:rgba(255,255,255,.12);padding:4px;border-radius:12px;}
+  .nav-tab{
+    color:#F2E7D2;
+    text-decoration:none;
+    font-size:13.5px;
+    font-weight:700;
+    padding:6px 14px;
+    border-radius:9px;
+    white-space:nowrap;
+    transition:background .15s,color .15s;
+  }
+  .nav-tab:hover{background:rgba(255,255,255,.14);color:#fff;}
+  .nav-tab.active{background:#fff;color:var(--bronze-dark);}
+  .nav-tab:focus-visible{outline:2px solid #fff;outline-offset:2px;}
+  @media (max-width:640px){
+    .topbar{padding:14px 16px;}
+    .topbar h1{font-size:26px;}
+    .brand-group{gap:12px;}
+  }
   .topbar .badge-day{
     background:rgba(255,255,255,.15);
     border-radius:20px;
@@ -265,7 +287,13 @@
 <body>
 
 <div class="topbar">
-  <h1>عين</h1>
+  <div class="brand-group">
+    <h1>عين</h1>
+    <nav class="nav-tabs" aria-label="أقسام المنصة">
+      <a class="nav-tab active" href="index.html" aria-current="page">الأزمة الراهنة</a>
+      <a class="nav-tab" href="elections.html">انتخابات 2026</a>
+    </nav>
+  </div>
   <div class="badge-day" id="today-badge"><i class="ti ti-calendar"></i><span></span></div>
 </div>
 
