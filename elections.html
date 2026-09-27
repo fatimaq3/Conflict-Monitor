@@ -288,7 +288,7 @@
       <table>
         <thead>
           <tr>
-            <th>التحقق</th>
+            <th>عدد المقالات</th>
             <th id="th-date" style="cursor:pointer;user-select:none;">التاريخ <i class="ti ti-arrow-down" id="date-sort-icon" style="font-size:11px;"></i></th>
             <th>العنوان</th>
             <th>المصدر</th>
@@ -314,9 +314,9 @@
   let loadedOnce = false;
 
   var VERIFY_LEVELS = [
-    { key: 1, label: 'مصدر واحد', bg: '#EFEBE6', color: '#6E6259', argb: 'FFEFEBE6', font: 'FF6E6259' },
-    { key: 2, label: 'مصدران', bg: '#FBF1DC', color: '#7A5F00', argb: 'FFFBF1DC', font: 'FF7A5F00' },
-    { key: 3, label: '3+ مصادر', bg: '#E4EFE8', color: '#1c4a30', argb: 'FFE4EFE8', font: 'FF1C4A30' }
+    { key: 1, label: 'مقال واحد', bg: '#EFEBE6', color: '#6E6259', argb: 'FFEFEBE6', font: 'FF6E6259' },
+    { key: 2, label: 'مقالان', bg: '#FBF1DC', color: '#7A5F00', argb: 'FFFBF1DC', font: 'FF7A5F00' },
+    { key: 3, label: '3+ مقالات', bg: '#E4EFE8', color: '#1c4a30', argb: 'FFE4EFE8', font: 'FF1C4A30' }
   ];
 
   function verifyLevel(count){
@@ -452,7 +452,7 @@
 
   function renderStats(rows){
     document.getElementById('stats-hero').innerHTML =
-      '<i class="ti ti-chart-bar"></i><div><div class="n">'+rows.length+'</div><div class="l">إجمالي المواضيع</div></div>';
+      '<i class="ti ti-chart-bar"></i><div><div class="n">'+rows.length+'</div><div class="l">إجمالي القضايا</div></div>';
 
     var counts = [0, 0, 0];
     rows.forEach(function(s){ counts[verifyLevel(s.source_count).key - 1]++; });
@@ -490,8 +490,8 @@
     if(!rows.length){
       tbody.innerHTML = '';
       showEmpty(loadedOnce && stories.length
-        ? '<i class="ti ti-inbox"></i>لا توجد مواضيع في هذا الأسبوع، يُرجى اختيار أسبوع آخر'
-        : '<i class="ti ti-inbox"></i>لا توجد مواضيع بعد، تُحدَّث البيانات تلقائيًا كل ساعتين');
+        ? '<i class="ti ti-inbox"></i>لا توجد مقالات في هذا الأسبوع، يُرجى اختيار أسبوع آخر'
+        : '<i class="ti ti-inbox"></i>لا توجد مقالات بعد، تُحدَّث البيانات تلقائيًا كل ساعتين');
       return;
     }
     document.getElementById('empty-msg').style.display = 'none';
@@ -508,9 +508,9 @@
       return '<tr>'+
         '<td class="verify-cell">'+
           '<button class="verify-badge" data-id="'+s.id+'" aria-expanded="false" style="background:'+v.bg+';color:'+v.color+';">'+
-            '<i class="ti ti-circle-check"></i>'+v.label+'</button>'+
+            '<i class="ti ti-stack-2"></i>'+v.label+'</button>'+
           '<div class="src-popover" id="src-pop-'+s.id+'" style="display:none;">'+
-            '<div class="pop-head">المصادر الناقلة ('+s.articles.length+')</div>'+items+
+            '<div class="pop-head">المقالات المتناولة للقضية ('+s.articles.length+')</div>'+items+
           '</div>'+
         '</td>'+
         '<td class="date-cell">'+formatDateDisplay(s.story_date)+'</td>'+
@@ -568,7 +568,7 @@
 
   document.getElementById('export-excel').onclick = async function(){
     var rows = getFiltered();
-    var headers = ['التحقق','التاريخ','العنوان','المصدر','الرابط','المصادر الناقلة'];
+    var headers = ['عدد المقالات','التاريخ','العنوان','المصدر','الرابط','مصادر المقالات'];
     var widths = [14, 13, 60, 24, 36, 40];
 
     var wb = new ExcelJS.Workbook();
@@ -625,7 +625,7 @@
     var counts = [0, 0, 0];
     rows.forEach(function(s){ counts[verifyLevel(s.source_count).key - 1]++; });
 
-    var statCards = '<div class="pdf-stat total"><div class="n">'+rows.length+'</div><div class="l">إجمالي المواضيع</div></div>' +
+    var statCards = '<div class="pdf-stat total"><div class="n">'+rows.length+'</div><div class="l">إجمالي القضايا</div></div>' +
       VERIFY_LEVELS.map(function(v, i){
         return '<div class="pdf-stat" style="background:'+v.bg+';"><div class="n" style="color:'+v.color+';">'+counts[i]+'</div><div class="l" style="color:'+v.color+';">'+v.label+'</div></div>';
       }).join('');
@@ -674,7 +674,7 @@
       '<div class="cover">'+
         '<div class="logo">عين</div>'+
         '<div class="gold-line"></div>'+
-        '<div class="subtitle">انتخابات 2026 - تقرير التغطية الإعلامية</div>'+
+        '<div class="subtitle">انتخابات 2026 - مقالات تحليلية مختارة</div>'+
         '<div class="meta">'+
           '<div><b>الأسبوع:</b> '+escapeHtml(weekLabel)+'</div>'+
           '<div><b>تاريخ التصدير:</b> '+escapeHtml(exportDate)+'</div>'+
@@ -683,7 +683,7 @@
       '<div class="page-head"><span class="brand">عين - انتخابات 2026</span><span class="date">تاريخ التصدير: '+escapeHtml(exportDate)+'</span></div>'+
       '<div class="pdf-stats">'+statCards+'</div>'+
       '<table><thead><tr>'+
-        '<th>التحقق</th><th>التاريخ</th><th>العنوان</th><th>المصدر</th><th>المصادر الناقلة</th>'+
+        '<th>عدد المقالات</th><th>التاريخ</th><th>العنوان</th><th>المصدر</th><th>مصادر المقالات</th>'+
       '</tr></thead><tbody>'+tableRows+'</tbody></table>'+
       '<div class="footer-note">تم إنشاء هذا التقرير تلقائيًا من منصة عين</div>'+
       '</body></html>';

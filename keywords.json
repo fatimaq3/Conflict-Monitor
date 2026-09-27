@@ -1,7 +1,9 @@
 {
-  "_note": "search_terms: broad election terms. names: add people to track later, one name per entry, e.g. \"John Smith\". backfill_start: first-run start date (Riyadh time). lookback_days: how far back each run searches; duplicates are skipped automatically.",
+  "_note": "search_terms: broad election terms. names: people to track later, e.g. \"John Smith\". min_score: minimum analysis score (1-10) to publish. daily_cap: target max new articles per day (only 9+ scores pass once reached). backfill_start: first-run start date (Riyadh). lookback_days: how far back each run searches; duplicates are skipped automatically.",
   "backfill_start": "2026-09-23",
   "lookback_days": 5,
+  "min_score": 8,
+  "daily_cap": 10,
   "search_terms": [
     "election",
     "elections",
