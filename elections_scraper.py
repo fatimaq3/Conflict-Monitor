@@ -2,14 +2,17 @@
 """
 Ayn - US Elections 2026: selected analytical articles.
 
-Every run:
+Every run (every 4 hours):
   1. Search the approved sources (sources.json) with the keywords (keywords.json)
-     via Google News RSS and the sources' own RSS feeds.
-  2. Check 1 (keywords): items must match the election keywords.
-  3. Triage (Claude Haiku): keep only items that may be analytical pieces about US elections.
-  4. Final selection (Claude Sonnet): score analytical value, keep only strong pieces
-     (about 5-10 a day), and link each to an existing issue if it analyzes the same issue.
-  5. Save to Supabase. Each issue's count grows as more articles analyze it.
+     via Google News RSS and the sources' own RSS feeds.        (Check 1: keywords)
+  2. Triage by title (Claude Haiku): drop straight news and non-analysis.
+  3. Resolve the original article link and read its content (description + opening
+     text). No readable content means no publishing.
+  4. Editor pass (Claude Sonnet): article type, the analytical question it addresses
+     (in Arabic), score out of 10, and whether it belongs to an existing issue.
+  5. Independent verification pass (Claude Sonnet): an article is published, and an
+     article is filed under an issue, only when both passes agree.
+  6. Save to Supabase with the original link.
 
 Environment variables (GitHub Secrets):
   SUPABASE_URL, SUPABASE_SERVICE_KEY, ANTHROPIC_API_KEY
@@ -30,6 +33,15 @@ from zoneinfo import ZoneInfo
 import anthropic
 import feedparser
 import requests
+import trafilatura
+
+try:
+    from googlenewsdecoder import gnewsdecoder as _gdecode
+except ImportError:
+    try:
+        from googlenewsdecoder import new_decoderv1 as _gdecode
+    except ImportError:
+        _gdecode = None
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 SB_URL = os.environ["SUPABASE_URL"].rstrip("/")
@@ -41,16 +53,20 @@ UTC = timezone.utc
 RIYADH = ZoneInfo("Asia/Riyadh")
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-                  "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
+                  "(KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+    "Accept-Language": "en-US,en;q=0.9",
 }
-BATCH_SIZE = 20          # candidates per final-selection call
-TRIAGE_BATCH = 40        # candidates per triage call
-TIME_BUDGET_MIN = 40     # stop AI work after this many minutes; the rest waits for the next run
-MATCH_DAYS = 7           # compare new items with stories from the last 7 days
-MAX_EXISTING = 400       # max existing stories sent to Claude per call
+TRIAGE_BATCH = 40        # titles per triage call
+BATCH_SIZE = 10          # articles (with content) per editor / verifier call
+CONTENT_WORDS = 800      # words of article text given to the editor
+MIN_CONTENT_WORDS = 35   # below this, the article is not published
+TIME_BUDGET_MIN = 45     # stop AI work after this many minutes; the rest waits for the next run
+MATCH_DAYS = 7           # compare new articles with issues from the last 7 days
+MAX_EXISTING = 300       # max existing issues sent per call
 MAX_CANDIDATES = 1500    # safety cap per run
 GOOGLE_PAUSE = 1.0       # seconds between Google News requests
 GOOGLE_QUERY_LEN = 80    # short OR-groups: long queries make Google ignore site:
+ANALYTIC_TYPES = {"analysis", "opinion", "explainer", "feature"}
 SKIP_TITLE_RE = re.compile(
     r"^\s*(watch|video|live|listen|photos?|exclusive|breaking)\s*[:|]|live updates|week in politics|"
     r"in brief|toplines|cross-tabs|primary results|election results|voter guide|what to know|countdown|"
@@ -218,55 +234,130 @@ def fetch_rss(url, source_name):
     return out
 
 
+# ------------------------------------------------------------------ content
+
 META_RE = re.compile(
-    r'<meta[^>]+(?:property|name)=["\'](?:og:description|description)["\'][^>]*>', re.I)
+    r'<meta[^>]+(?:property|name)=["\'](?:og:description|description|twitter:description)["\'][^>]*>', re.I)
 CONTENT_RE = re.compile(r'content=["\']([^"\']*)["\']', re.I)
 
 
-def fetch_description(url):
+def resolve_link(url):
+    """Return the publisher's own URL for a Google News link (None if it cannot be resolved)."""
+    if "news.google.com" not in url:
+        return url
+    if _gdecode is None:
+        return None
+    for attempt in range(2):
+        try:
+            try:
+                res = _gdecode(url, interval=1)
+            except TypeError:
+                res = _gdecode(url)
+            if isinstance(res, dict) and res.get("status") and res.get("decoded_url"):
+                return res["decoded_url"]
+        except Exception:  # noqa: BLE001
+            pass
+        time.sleep(2)
+    return None
+
+
+def fetch_content(url):
+    """Description + opening text of the article, as plain text."""
     try:
-        r = requests.get(url, headers=HEADERS, timeout=10)
-        if r.status_code != 200:
-            return ""
-        m = META_RE.search(r.text[:300000])
-        if not m:
-            return ""
-        c = CONTENT_RE.search(m.group(0))
-        return strip_tags(c.group(1))[:500] if c else ""
+        r = requests.get(url, headers=HEADERS, timeout=20)
     except requests.RequestException:
         return ""
+    if r.status_code != 200 or not r.text:
+        return ""
+    page = r.text[:2_000_000]
+    desc = ""
+    m = META_RE.search(page[:300000])
+    if m:
+        c = CONTENT_RE.search(m.group(0))
+        desc = strip_tags(c.group(1)) if c else ""
+    body = ""
+    try:
+        body = trafilatura.extract(page, include_comments=False, include_tables=False,
+                                   favor_precision=True) or ""
+    except Exception:  # noqa: BLE001
+        body = ""
+    words = body.split()
+    text = " ".join(words[:CONTENT_WORDS])
+    if desc and desc[:60] not in text:
+        text = (desc + "\n\n" + text).strip()
+    return text
+
+
+def load_content(items):
+    """Resolve links (sequential: Google rate-limits) then fetch pages (parallel)."""
+    for it in items:
+        it["url"] = resolve_link(it["link"]) if it["origin"] == "google" else it["link"]
+        if it["origin"] == "google":
+            time.sleep(0.5)
+    todo = [it for it in items if it.get("url")]
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        for it, text in zip(todo, pool.map(lambda x: fetch_content(x["url"]), todo)):
+            it["content"] = text
+    for it in items:
+        it.setdefault("content", "")
+        if it["origin"] == "rss" and it.get("snippet") and it["snippet"][:60] not in it["content"]:
+            it["content"] = (it["snippet"] + "\n\n" + it["content"]).strip()
+    return [it for it in items if len(it["content"].split()) >= MIN_CONTENT_WORDS]
 
 
 # ------------------------------------------------------------------ Claude
 
 TRIAGE_PROMPT = """You triage items for a page that lists only ANALYTICAL articles about the 2026 United States elections.
 
-For each candidate, decide whether it could be an analytical piece (analysis, opinion or op-ed, explainer, or long-form feature built around an argument) that is primarily about US elections: the 2026 midterms, specific races, campaigns and candidates, voters and polling trends, voting rules, redistricting, or the 2028 race.
+For each candidate, decide whether it could be an analytical piece (analysis, opinion or op-ed, explainer, or long-form feature built around an argument) that is primarily about US elections: the 2026 midterms, specific races, campaigns and candidates, voters and polling trends, voting rules, election administration, redistricting, or the 2028 race.
 
-Answer NO for: straight news reports and breaking news, poll toplines or cross-tabs, forecast or data pages, results pages, voter guides, live blogs, videos, podcasts, newsletters, roundups, digests and "in brief" items, non-English items, and anything not primarily about US elections.
-When unsure whether a relevant piece is analysis, answer YES; a stricter editor reviews next.
+Answer NO for: straight news reports and breaking news, poll toplines or cross-tabs, forecast or data pages, results pages, voter guides, race trackers, live blogs, videos, podcasts, newsletters, roundups, digests and "in brief" items, non-English items, and anything not primarily about US elections.
+When unsure whether a relevant piece is analysis, answer YES; a stricter editor reads the full content next.
 
 Return JSON only: {"keep":[0,3,7]}"""
 
 
-SYSTEM_PROMPT = """You are the final editor of a page listing only the best ANALYTICAL articles about the 2026 United States elections, read by senior policy analysts. The page shows roughly 5 to 10 articles per day across all sources, so be highly selective.
+EDITOR_PROMPT = """You are the editor of a page listing only the best ANALYTICAL articles about the 2026 United States elections, read by senior policy analysts. The page shows roughly 5 to 10 articles per day across all sources, so be highly selective. You receive each article's title, source and CONTENT (description and opening text). Judge from the content, never from the title alone.
 
 For every CANDIDATE return:
-1. analysis: true only for a genuine analytical piece (analysis, opinion or op-ed, explainer, or long-form feature built around an argument). False for news reports, roundups, digests, "in brief" items, poll toplines, forecast pages, guides, videos, podcasts and non-English items.
-2. score (1-10): analytical value to a policy analyst. Weigh depth of argument, use of evidence and data, originality of insight, significance for election outcomes or the direction of US politics, and credibility. 9-10 exceptional and essential; 8 strong and clearly worth reading; 6-7 decent but not essential; 5 or below thin. Partisan attack pieces, pieces built on one quote, and celebrity or human-interest angles score 5 or below.
-3. match: if the piece analyzes the same specific issue or question as one of the EXISTING ISSUES, return that id. Different angles on the same specific question count as the same issue (for example, several analyses of why Republican candidates are distancing themselves from Trump). Broad themes such as "the midterms", "polls" or "Trump's popularity" are too broad on their own. When in doubt, return null.
-4. group: if match is null, give candidates in this batch that analyze the same specific issue the same short label (for example "g1"); otherwise null.
+1. type: one of analysis, opinion, explainer, feature, news, roundup, guide, tracker, other. Use news for reporting of events even when it includes some context; guide or tracker for race lists, "races to watch", forecasts and data pages.
+2. question: the single specific analytical question the article addresses, written as one short sentence in formal Modern Standard Arabic (at most 20 words). Be specific about the actual subject, e.g. "هل سيدير مشككون في نتائج 2020 انتخابات 2028 في الولايات المتأرجحة؟" rather than "ما السباقات الأهم؟".
+3. score (1-10): analytical value to a policy analyst: depth of argument, evidence and data, originality, significance for election outcomes or the direction of US politics, credibility. 9-10 exceptional; 8 strong and clearly worth reading; 6-7 decent but not essential; 5 or below thin. Only analysis, opinion, explainer or feature can score 8 or more. Partisan attack pieces, pieces built on one quote, and celebrity or human-interest angles score 5 or below.
+4. match: the id of an EXISTING ISSUE only if the article addresses the same specific analytical question as that issue (compare questions, not headline words). Different angles on the same specific question count as the same issue. Sharing a broad theme ("key races", "polls", "Trump's popularity", "the midterms") is NOT enough. Example: an essay on election-denier candidates for secretary of state and an analysis of the administration's legal push over state voter rolls share the question of federal and partisan pressure on election administration, so they match; that same essay and a list of House races that could decide control do NOT match. When in doubt, null.
+5. group: if match is null, give candidates in this batch that address the same specific question the same short label (e.g. "g1"); otherwise null. Same strict rule.
+6. reason: at most 15 words in English explaining the score.
 
-Judge from the title, source and snippet. Return JSON only, no prose, in exactly this shape:
-{"results":[{"i":0,"analysis":true,"score":8,"match":null,"group":null}]}
+Return JSON only, no prose:
+{"results":[{"i":0,"type":"analysis","question":"...","score":8,"match":null,"group":null,"reason":"..."}]}
 Include one entry for every candidate index."""
 
 
-def ask_claude(client, model, system, content, max_tokens=4096):
+VERIFY_PROMPT = """You are an independent second reviewer for a page listing only the best ANALYTICAL articles about the 2026 United States elections, read by senior policy analysts. Another editor has proposed the items below. Your job is to catch mistakes; when in doubt, reject.
+
+For each item you get the article (title, source, content) and, when relevant, a PROPOSED ISSUE (the analytical question of an issue and the title of an article already filed under it).
+
+Return for each item:
+- publish_ok: true only if you independently judge the article to be a genuine analytical piece (analysis, opinion, explainer or feature, not a news report, list, guide or tracker), primarily about US elections, with strong analytical value (8 or more out of 10) for a policy analyst.
+- same_issue_ok: if a PROPOSED ISSUE is given, true only if the article addresses the same specific analytical question as that issue (a shared broad theme is not enough); if no proposed issue is given, null.
+
+Return JSON only, no prose:
+{"results":[{"i":0,"publish_ok":true,"same_issue_ok":null}]}
+Include one entry for every item index."""
+
+
+def ask_claude(client, model, system, blocks, max_tokens=4096):
+    """blocks: list of (text, cache) pairs sent as the user message."""
+    content = []
+    for text, cache in blocks:
+        block = {"type": "text", "text": text}
+        if cache:
+            block["cache_control"] = {"type": "ephemeral"}
+        content.append(block)
     for attempt in range(3):
         try:
             msg = client.messages.create(
-                model=model, max_tokens=max_tokens, system=system,
+                model=model, max_tokens=max_tokens,
+                system=[{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
                 messages=[{"role": "user", "content": content}],
             )
             text = "".join(b.text for b in msg.content if getattr(b, "type", "") == "text")
@@ -278,19 +369,17 @@ def ask_claude(client, model, system, content, max_tokens=4096):
     return None
 
 
-def candidate_lines(batch):
-    lines = []
-    for i, it in enumerate(batch):
-        line = f"[{i}] {it['source']} | {it['title']}"
-        if it.get("snippet"):
-            line += f" | {it['snippet'][:300]}"
-        lines.append(line)
-    return "\n".join(lines)
+def title_lines(batch):
+    return "\n".join(f"[{i}] {it['source']} | {it['title']}" for i, it in enumerate(batch))
+
+
+def article_block(i, it):
+    return f"[{i}] SOURCE: {it['source']}\nTITLE: {it['title']}\nCONTENT:\n{it['content']}\n"
 
 
 def triage(client, batch):
     data = ask_claude(client, TRIAGE_MODEL, TRIAGE_PROMPT,
-                      "CANDIDATES:\n" + candidate_lines(batch), max_tokens=1024)
+                      [("CANDIDATES:\n" + title_lines(batch), False)], max_tokens=1024)
     if data is None:
         return None
     keep = set()
@@ -302,11 +391,31 @@ def triage(client, batch):
     return keep
 
 
-def judge(client, batch, stories):
-    existing = "\n".join(f"{s['id']} | {s['title']}" for s in stories[:MAX_EXISTING]) or "(none)"
-    content = (f"EXISTING ISSUES (id | title of first article):\n{existing}\n\n"
-               f"CANDIDATES:\n{candidate_lines(batch)}")
-    data = ask_claude(client, MODEL, SYSTEM_PROMPT, content)
+def existing_text(stories):
+    lines = [f"{s['id']} | {s.get('question') or s['title']}" for s in stories[:MAX_EXISTING]]
+    return "EXISTING ISSUES (id | analytical question):\n" + ("\n".join(lines) or "(none)")
+
+
+def edit(client, batch, stories):
+    data = ask_claude(client, MODEL, EDITOR_PROMPT, [
+        (existing_text(stories), True),
+        ("CANDIDATES:\n\n" + "\n".join(article_block(i, it) for i, it in enumerate(batch)), False),
+    ], max_tokens=6000)
+    if data is None:
+        return None
+    return {int(r["i"]): r for r in data.get("results", []) if "i" in r}
+
+
+def verify(client, entries):
+    """entries: list of (item, proposed_issue_or_None) where proposed issue = {question, title}."""
+    parts = []
+    for i, (it, issue) in enumerate(entries):
+        block = article_block(i, it)
+        if issue:
+            block += f"PROPOSED ISSUE: {issue['question']} | filed article: {issue['title']}\n"
+        parts.append(block)
+    data = ask_claude(client, MODEL, VERIFY_PROMPT, [("ITEMS:\n\n" + "\n".join(parts), False)],
+                      max_tokens=3000)
     if data is None:
         return None
     return {int(r["i"]): r for r in data.get("results", []) if "i" in r}
@@ -319,8 +428,10 @@ def insert_articles(story_id, arts):
         "story_id": story_id,
         "title": a["title"],
         "source": a["source"],
-        "link": a["link"],
+        "link": a.get("url") or a["link"],
         "published_at": iso(a["published"]),
+        "question": a.get("question"),
+        "score": a.get("score"),
     } for a in arts]
     sb("POST", "election_articles", params={"on_conflict": "link"}, body=body,
        prefer="resolution=ignore-duplicates,return=minimal")
@@ -352,9 +463,10 @@ def create_story(arts):
     row = sb("POST", "election_stories", body={
         "title": first["title"],
         "source": first["source"],
-        "link": first["link"],
+        "link": first.get("url") or first["link"],
         "published_at": iso(first["published"]),
         "story_date": riyadh_date(first["published"]),
+        "question": first.get("question"),
         "source_count": len(arts),
         "updated_at": iso(datetime.now(UTC)),
     }, prefer="return=representation")[0]
@@ -376,6 +488,101 @@ MIN_SCORE = 8
 DAILY_CAP = 10
 
 
+def to_float(v):
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def to_int(v):
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return None
+
+
+def process_batch(client, batch, stories, story_by_id, day_counts):
+    """Editor pass, then verification pass. Returns (published, new_issues, filed_under_existing)."""
+    proposals = edit(client, batch, stories)
+    if proposals is None:
+        return None
+
+    passing = []
+    for i, it in enumerate(batch):
+        r = proposals.get(i) or {}
+        it["question"] = (r.get("question") or "").strip() or None
+        it["score"] = to_float(r.get("score"))
+        if str(r.get("type", "")).lower() not in ANALYTIC_TYPES or it["score"] < MIN_SCORE:
+            continue
+        if not it["question"]:
+            continue
+        passing.append((it, r))
+
+    # Proposed placement for each passing article
+    entries, plans = [], []
+    leaders = {}
+    for it, r in passing:
+        match = to_int(r.get("match"))
+        group = r.get("group")
+        if match in story_by_id:
+            issue = story_by_id[match]
+            entries.append((it, {"question": issue.get("question") or issue["title"], "title": issue["title"]}))
+            plans.append(("match", match))
+        elif group and str(group) in leaders:
+            lead = leaders[str(group)]
+            entries.append((it, {"question": lead["question"], "title": lead["title"]}))
+            plans.append(("group", str(group)))
+        else:
+            if group:
+                leaders[str(group)] = it
+            entries.append((it, None))
+            plans.append(("new", str(group) if group else None))
+
+    if not entries:
+        return 0, 0, 0
+    checks = verify(client, entries)
+    if checks is None:
+        return None
+
+    published = created = attached = 0
+    new_issue_for_group = {}
+    for idx, ((it, issue), (kind, ref)) in enumerate(zip(entries, plans)):
+        c = checks.get(idx) or {}
+        if not c.get("publish_ok"):
+            continue
+        same = bool(c.get("same_issue_ok"))
+        day = riyadh_date(it["published"])
+
+        if kind == "match" and same:
+            insert_articles(ref, [it])
+            refresh_story(ref)
+            attached += 1
+            published += 1
+            continue
+        if kind == "group" and same and ref in new_issue_for_group:
+            sid = new_issue_for_group[ref]
+            insert_articles(sid, [it])
+            refresh_story(sid)
+            attached += 1
+            published += 1
+            continue
+
+        # New issue (also the fallback when the second reviewer rejects a placement)
+        if day_counts.get(day, 0) >= DAILY_CAP and it["score"] < 9:
+            continue
+        row = create_story([it])
+        created += 1
+        published += 1
+        day_counts[row["story_date"]] = day_counts.get(row["story_date"], 0) + 1
+        info = {"id": row["id"], "title": row["title"], "question": it["question"]}
+        stories.insert(0, info)
+        story_by_id[row["id"]] = info
+        if kind == "new" and ref:
+            new_issue_for_group[ref] = row["id"]
+    return published, created, attached
+
+
 def main():
     global MIN_SCORE, DAILY_CAP
     kw = load_json("keywords.json")
@@ -391,7 +598,9 @@ def main():
     backfill = datetime.fromisoformat(kw["backfill_start"]).replace(tzinfo=RIYADH).astimezone(UTC)
     since = max(backfill, now - timedelta(days=int(kw.get("lookback_days", 5))))
     days = max(1, int((now - since).total_seconds() // 86400) + 1)
-    log(f"Models: triage {TRIAGE_MODEL}, final {MODEL} | min score {MIN_SCORE}, daily cap {DAILY_CAP} | window starts {iso(since)} | {len(terms)} terms, {len(google_chunks)} query groups per site")
+    log(f"Models: triage {TRIAGE_MODEL}, editor/verifier {MODEL} | min score {MIN_SCORE}, "
+        f"daily cap {DAILY_CAP} | window starts {iso(since)} | link decoder "
+        f"{'ready' if _gdecode else 'MISSING'}")
 
     seen = {r["key"] for r in sb_all("election_seen", {
         "select": "key", "created_at": f"gte.{iso(now - timedelta(days=30))}"})}
@@ -400,8 +609,6 @@ def main():
     log(f"Already processed: {len(seen)} items, {len(known_links)} saved links")
 
     raw = []
-
-    # Direct RSS feeds (Check 1 applied below because feeds are not keyword-searched)
     for s in sources:
         for url in s.get("rss", []):
             try:
@@ -412,7 +619,6 @@ def main():
             except Exception as ex:  # noqa: BLE001
                 log(f"RSS  {s['name']} failed: {ex}")
 
-    # Google News (the keyword search itself is Check 1)
     for s in sources:
         for domain in s["domains"]:
             got = on_site = 0
@@ -427,14 +633,10 @@ def main():
                 time.sleep(GOOGLE_PAUSE)
             log(f"GNEWS {domain}: {got} results, {on_site} from this source")
 
-    # Normalize, whitelist, window, de-duplicate
     candidates = {}
     drops = {"empty_or_video": 0, "not_approved_source": 0, "outside_window": 0, "already_processed": 0}
     for it in raw:
-        if not it.get("title") or not it.get("link"):
-            drops["empty_or_video"] += 1
-            continue
-        if SKIP_TITLE_RE.search(it["title"]):
+        if not it.get("title") or not it.get("link") or SKIP_TITLE_RE.search(it["title"]):
             drops["empty_or_video"] += 1
             continue
         name = it.get("source") or source_for(it.get("host", ""), src_idx)
@@ -464,34 +666,14 @@ def main():
         log("Nothing new.")
         return
 
-    # Add page descriptions for direct links that have no snippet
-    need = [it for it in items if not it.get("snippet") and it["origin"] != "google"]
-    if need:
-        with ThreadPoolExecutor(max_workers=12) as pool:
-            for it, desc in zip(need, pool.map(lambda x: fetch_description(x["link"]), need)):
-                it["snippet"] = desc
-        log(f"Fetched descriptions for {len(need)} items")
-
-    stories = sb_all("election_stories", {
-        "select": "id,title,updated_at",
-        "updated_at": f"gte.{iso(now - timedelta(days=MATCH_DAYS))}",
-        "order": "updated_at.desc",
-    })
-    story_ids = {s["id"] for s in stories}
-    day_counts = {}
-    for r in sb_all("election_stories", {"select": "story_date",
-                                         "story_date": f"gte.{riyadh_date(since)}"}):
-        day_counts[r["story_date"]] = day_counts.get(r["story_date"], 0) + 1
-    log(f"Existing issues in the last {MATCH_DAYS} days: {len(stories)}")
-
     client = anthropic.Anthropic()
     deadline = START + timedelta(minutes=TIME_BUDGET_MIN)
 
-    # Triage (cheap model): drop straight news and non-analysis
+    # Triage by title
     shortlisted = []
     for b in range(0, len(items), TRIAGE_BATCH):
         if datetime.now(UTC) > deadline:
-            log("Time budget reached during triage; remaining items wait for the next run")
+            log("Time budget reached during triage; the rest waits for the next run")
             break
         batch = items[b:b + TRIAGE_BATCH]
         keep = triage(client, batch)
@@ -501,63 +683,39 @@ def main():
         mark_seen([it["key"] for i, it in enumerate(batch) if i not in keep])
     log(f"Shortlisted as possible analysis: {len(shortlisted)}")
 
-    kept = created = attached = 0
-    for b in range(0, len(shortlisted), BATCH_SIZE):
+    # Content: no readable content, no publishing
+    readable = load_content(shortlisted)
+    unreadable = [it for it in shortlisted if it not in readable]
+    mark_seen([it["key"] for it in unreadable])
+    log(f"Readable content: {len(readable)} | no content (not published): {len(unreadable)}")
+
+    stories = sb_all("election_stories", {
+        "select": "id,title,question,updated_at",
+        "updated_at": f"gte.{iso(now - timedelta(days=MATCH_DAYS))}",
+        "order": "updated_at.desc",
+    })
+    story_by_id = {s["id"]: s for s in stories}
+    day_counts = {}
+    for r in sb_all("election_stories", {"select": "story_date",
+                                         "story_date": f"gte.{riyadh_date(since)}"}):
+        day_counts[r["story_date"]] = day_counts.get(r["story_date"], 0) + 1
+    log(f"Existing issues in the last {MATCH_DAYS} days: {len(stories)}")
+
+    totals = [0, 0, 0]
+    for b in range(0, len(readable), BATCH_SIZE):
         if datetime.now(UTC) > deadline:
-            log("Time budget reached; remaining shortlisted items wait for the next run")
+            log("Time budget reached; the rest waits for the next run")
             break
-        batch = shortlisted[b:b + BATCH_SIZE]
-        results = judge(client, batch, stories)
-        if results is None:
+        batch = readable[b:b + BATCH_SIZE]
+        res = process_batch(client, batch, stories, story_by_id, day_counts)
+        if res is None:
             log(f"Batch {b // BATCH_SIZE + 1}: skipped, will retry next run")
             continue
-
-        groups, singles, matches = {}, [], {}
-        for i, it in enumerate(batch):
-            r = results.get(i)
-            if not r or not r.get("analysis"):
-                continue
-            try:
-                score = float(r.get("score") or 0)
-            except (TypeError, ValueError):
-                score = 0
-            if score < MIN_SCORE:
-                continue
-            match = r.get("match")
-            try:
-                match = int(match) if match is not None else None
-            except (TypeError, ValueError):
-                match = None
-            if match in story_ids:
-                matches.setdefault(match, []).append(it)
-                kept += 1
-                continue
-            day = riyadh_date(it["published"])
-            if day_counts.get(day, 0) >= DAILY_CAP and score < 9:
-                continue
-            it["score"] = score
-            kept += 1
-            if r.get("group"):
-                groups.setdefault(str(r["group"]), []).append(it)
-            else:
-                singles.append([it])
-
-        for sid, arts in matches.items():
-            insert_articles(sid, arts)
-            refresh_story(sid)
-            attached += len(arts)
-
-        for arts in list(groups.values()) + singles:
-            row = create_story(arts)
-            created += 1
-            story_ids.add(row["id"])
-            stories.insert(0, {"id": row["id"], "title": row["title"]})
-            day_counts[row["story_date"]] = day_counts.get(row["story_date"], 0) + 1
-
+        totals = [x + y for x, y in zip(totals, res)]
         mark_seen([it["key"] for it in batch])
-        log(f"Batch {b // BATCH_SIZE + 1}: {len(batch)} reviewed")
+        log(f"Batch {b // BATCH_SIZE + 1}: {len(batch)} read | published {res[0]}")
 
-    log(f"Done. Kept {kept} | new issues {created} | added to existing issues {attached}")
+    log(f"Done. Published {totals[0]} | new issues {totals[1]} | added to existing issues {totals[2]}")
 
 
 if __name__ == "__main__":

@@ -193,6 +193,8 @@
 
   .title-cell{max-width:420px;}
   .title-text{font-weight:600;color:var(--black);line-height:1.5;text-align:right;}
+  .question-text{font-size:11px;color:var(--navy);margin-top:4px;line-height:1.6;direction:rtl;text-align:right;}
+  .question-text b{font-weight:700;}
   .source-cell{font-size:11.5px;color:var(--brown);white-space:nowrap;}
   .date-cell{white-space:nowrap;}
   a.article-link{color:var(--green);text-decoration:none;font-size:11px;display:inline-flex;align-items:center;gap:3px;white-space:nowrap;}
@@ -410,7 +412,7 @@
     while(true){
       const { data, error } = await sb
         .from('election_stories')
-        .select('id,story_date,title,source,link,published_at,source_count,updated_at,election_articles(id,title,source,link,published_at)')
+        .select('id,story_date,title,question,source,link,published_at,source_count,updated_at,election_articles(id,title,source,link,published_at)')
         .order('published_at', { ascending: false })
         .range(from, from + size - 1);
       if(error){
@@ -514,7 +516,8 @@
           '</div>'+
         '</td>'+
         '<td class="date-cell">'+formatDateDisplay(s.story_date)+'</td>'+
-        '<td class="title-cell"><div class="title-text" dir="auto">'+escapeHtml(s.title)+'</div></td>'+
+        '<td class="title-cell"><div class="title-text" dir="auto">'+escapeHtml(s.title)+'</div>'+
+          (s.question ? '<div class="question-text"><b>القضية:</b> '+escapeHtml(s.question)+'</div>' : '')+'</td>'+
         '<td class="source-cell">'+escapeHtml(s.source)+'</td>'+
         '<td><a class="article-link" href="'+escapeHtml(s.link)+'" target="_blank" rel="noopener"><i class="ti ti-external-link"></i>فتح الرابط</a></td>'+
       '</tr>';
@@ -566,10 +569,14 @@
     }).join('، ');
   }
 
+  function articlesList(s){
+    return s.articles.map(function(a){ return a.source + ' - ' + a.title; }).join('\n');
+  }
+
   document.getElementById('export-excel').onclick = async function(){
     var rows = getFiltered();
-    var headers = ['عدد المقالات','التاريخ','العنوان','المصدر','الرابط','مصادر المقالات'];
-    var widths = [14, 13, 60, 24, 36, 40];
+    var headers = ['عدد المقالات','التاريخ','العنوان','القضية','المصدر','الرابط','مقالات القضية'];
+    var widths = [14, 13, 50, 45, 24, 36, 70];
 
     var wb = new ExcelJS.Workbook();
     var ws = wb.addWorksheet('انتخابات 2026', { views: [{ rightToLeft: true, state: 'frozen', ySplit: 1 }] });
@@ -585,7 +592,7 @@
 
     rows.forEach(function(s, idx){
       var v = verifyLevel(s.source_count);
-      var row = ws.addRow([v.label, formatDateDisplay(s.story_date), s.title, s.source, s.link, sourcesList(s)]);
+      var row = ws.addRow([v.label, formatDateDisplay(s.story_date), s.title, s.question || '', s.source, s.link, articlesList(s)]);
       row.eachCell(function(cell){
         cell.alignment = { horizontal: 'right', vertical: 'middle', wrapText: true };
         cell.font = { name: 'Arial', size: 10.5 };
@@ -598,8 +605,8 @@
       vc.font = { name: 'Arial', size: 10.5, bold: true, color: { argb: v.font } };
       vc.alignment = { horizontal: 'center', vertical: 'middle' };
       if(s.link){
-        row.getCell(5).value = { text: s.link, hyperlink: s.link };
-        row.getCell(5).font = { name: 'Arial', size: 10, color: { argb: 'FF286140' }, underline: true };
+        row.getCell(6).value = { text: s.link, hyperlink: s.link };
+        row.getCell(6).font = { name: 'Arial', size: 10, color: { argb: 'FF286140' }, underline: true };
       }
     });
 
@@ -635,7 +642,7 @@
       return '<tr>'+
         '<td><span class="pdf-badge" style="background:'+v.bg+';color:'+v.color+';">'+v.label+'</span></td>'+
         '<td class="c-date">'+formatDateDisplay(s.story_date)+'</td>'+
-        '<td class="c-title" dir="auto">'+escapeHtml(s.title)+'</td>'+
+        '<td class="c-title"><div dir="auto">'+escapeHtml(s.title)+'</div>'+(s.question ? '<div class="c-q">القضية: '+escapeHtml(s.question)+'</div>' : '')+'</td>'+
         '<td>'+escapeHtml(s.source)+'</td>'+
         '<td class="c-srcs">'+escapeHtml(sourcesList(s))+'</td>'+
       '</tr>';
@@ -668,6 +675,7 @@
       '.c-date{white-space:nowrap;color:#707070;}'+
       '.c-title{max-width:230px;font-weight:700;color:#2B2B29;}'+
       '.c-srcs{font-size:9px;color:#6E6259;max-width:150px;}'+
+      '.c-q{font-size:9px;font-weight:400;color:#1B365D;margin-top:3px;direction:rtl;}'+
       '.pdf-badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:9px;font-weight:700;white-space:nowrap;}'+
       '.footer-note{margin-top:14px;font-size:9px;color:#B0ACA0;text-align:center;}'+
       '</style></head><body>'+
