@@ -2,7 +2,7 @@ name: Elections 2026 Scraper
 
 on:
   schedule:
-    - cron: "0 */2 * * *"   # every 2 hours (UTC)
+    - cron: "0 */4 * * *"   # every 4 hours (UTC)
   workflow_dispatch:         # manual run button
 
 concurrency:
@@ -15,7 +15,7 @@ permissions:
 jobs:
   scrape:
     runs-on: ubuntu-latest
-    timeout-minutes: 50
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
