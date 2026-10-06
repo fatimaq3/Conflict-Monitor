@@ -1,17 +1,4 @@
 {
-  "_note": "search_terms: broad election terms. names: people to track later, e.g. \"John Smith\". min_score: minimum analysis score (1-10) to publish. daily_cap: target max new articles per day (only 9+ scores pass once reached). backfill_start: first-run start date (Riyadh). lookback_days: how far back each run searches; duplicates are skipped automatically.",
-  "backfill_start": "2026-09-23",
-  "lookback_days": 5,
-  "min_score": 8,
-  "daily_cap": 10,
-  "search_terms": [
-    "election",
-    "elections",
-    "midterm",
-    "midterms",
-    "ballot",
-    "voters",
-    "voting",{
   "_note": "min_score/daily_cap: election updates. senate_*: tracked Senate candidates (edit the list to add or remove). house_*: House members on Iran. names: extra people to track. backfill_start: first-run start date (Riyadh). lookback_days: how far back each run searches; duplicates are skipped automatically.",
   "backfill_start": "2026-09-23",
   "lookback_days": 5,
@@ -50,116 +37,24 @@
   "energy_query": "(midterm OR midterms OR election OR campaign OR candidate) (oil OR energy OR gasoline OR \"gas prices\" OR OPEC OR drilling OR LNG)",
   "house_query": "Iran (\"Rep.\" OR congressman OR congresswoman OR \"House Republicans\" OR \"House Democrats\" OR \"House Speaker\")",
   "senate_candidates": [
-    {
-      "name": "Mike Rogers",
-      "state": "Michigan",
-      "party": "Republican"
-    },
-    {
-      "name": "Abdul El-Sayed",
-      "state": "Michigan",
-      "party": "Democrat"
-    },
-    {
-      "name": "Ken Paxton",
-      "state": "Texas",
-      "party": "Republican"
-    },
-    {
-      "name": "James Talarico",
-      "state": "Texas",
-      "party": "Democrat"
-    },
-    {
-      "name": "Jon Husted",
-      "state": "Ohio",
-      "party": "Republican"
-    },
-    {
-      "name": "Sherrod Brown",
-      "state": "Ohio",
-      "party": "Democrat"
-    },
-    {
-      "name": "Susan Collins",
-      "state": "Maine",
-      "party": "Republican"
-    },
-    {
-      "name": "Troy Jackson",
-      "state": "Maine",
-      "party": "Democrat"
-    },
-    {
-      "name": "Dan Sullivan",
-      "state": "Alaska",
-      "party": "Republican"
-    },
-    {
-      "name": "Mary Peltola",
-      "state": "Alaska",
-      "party": "Democrat"
-    },
-    {
-      "name": "Ashley Hinson",
-      "state": "Iowa",
-      "party": "Republican"
-    },
-    {
-      "name": "Josh Turek",
-      "state": "Iowa",
-      "party": "Democrat"
-    },
-    {
-      "name": "John Sununu",
-      "state": "New Hampshire",
-      "party": "Republican"
-    },
-    {
-      "name": "Chris Pappas",
-      "state": "New Hampshire",
-      "party": "Democrat"
-    },
-    {
-      "name": "Roy Cooper",
-      "state": "North Carolina",
-      "party": "Democrat"
-    },
-    {
-      "name": "Michael Whatley",
-      "state": "North Carolina",
-      "party": "Republican"
-    },
-    {
-      "name": "Jon Ossoff",
-      "state": "Georgia",
-      "party": "Democrat"
-    },
-    {
-      "name": "Mike Collins",
-      "state": "Georgia",
-      "party": "Republican"
-    }
-  ],
-  "names": []
-}
-    "polls",
-    "primary",
-    "campaign",
-    "Senate race",
-    "House race",
-    "governor race",
-    "gubernatorial",
-    "Congress",
-    "Republicans",
-    "Democrats",
-    "GOP",
-    "redistricting",
-    "turnout",
-    "electoral",
-    "early voting",
-    "swing state",
-    "battleground"
+    {"name": "Mike Rogers", "state": "Michigan", "party": "Republican"},
+    {"name": "Abdul El-Sayed", "state": "Michigan", "party": "Democrat"},
+    {"name": "Ken Paxton", "state": "Texas", "party": "Republican"},
+    {"name": "James Talarico", "state": "Texas", "party": "Democrat"},
+    {"name": "Jon Husted", "state": "Ohio", "party": "Republican"},
+    {"name": "Sherrod Brown", "state": "Ohio", "party": "Democrat"},
+    {"name": "Susan Collins", "state": "Maine", "party": "Republican"},
+    {"name": "Troy Jackson", "state": "Maine", "party": "Democrat"},
+    {"name": "Dan Sullivan", "state": "Alaska", "party": "Republican"},
+    {"name": "Mary Peltola", "state": "Alaska", "party": "Democrat"},
+    {"name": "Ashley Hinson", "state": "Iowa", "party": "Republican"},
+    {"name": "Josh Turek", "state": "Iowa", "party": "Democrat"},
+    {"name": "John Sununu", "state": "New Hampshire", "party": "Republican"},
+    {"name": "Chris Pappas", "state": "New Hampshire", "party": "Democrat"},
+    {"name": "Roy Cooper", "state": "North Carolina", "party": "Democrat"},
+    {"name": "Michael Whatley", "state": "North Carolina", "party": "Republican"},
+    {"name": "Jon Ossoff", "state": "Georgia", "party": "Democrat"},
+    {"name": "Mike Collins", "state": "Georgia", "party": "Republican"}
   ],
   "names": []
 }
