@@ -193,8 +193,9 @@
 
   .title-cell{max-width:420px;}
   .title-text{font-weight:600;color:var(--black);line-height:1.5;text-align:right;}
-  .question-text{font-size:11px;color:var(--navy);margin-top:4px;line-height:1.6;direction:rtl;text-align:right;}
-  .question-text b{font-weight:700;}
+  .person-text{font-size:11px;color:var(--soft-black);margin-top:4px;direction:ltr;text-align:right;font-weight:600;}
+  .cat-cell{font-size:11px;color:var(--brown);white-space:nowrap;}
+  .field.hidden{display:none;}
   .source-cell{font-size:11.5px;color:var(--brown);white-space:nowrap;}
   .date-cell{white-space:nowrap;}
   a.article-link{color:var(--green);text-decoration:none;font-size:11px;display:inline-flex;align-items:center;gap:3px;white-space:nowrap;}
@@ -268,8 +269,25 @@
 
   <div class="toolbar-card">
     <div class="field">
+      <label for="f-category">التصنيف</label>
+      <select id="f-category"></select>
+    </div>
+    <div class="field">
       <label for="f-week">الأسبوع</label>
       <select id="f-week"></select>
+    </div>
+    <div class="field hidden" id="field-state">
+      <label for="f-state">الولاية</label>
+      <select id="f-state"></select>
+    </div>
+    <div class="field hidden" id="field-party">
+      <label for="f-party">الحزب</label>
+      <select id="f-party">
+        <option value="">كل الأحزاب</option>
+        <option value="Republican">الحزب الجمهوري</option>
+        <option value="Democrat">الحزب الديمقراطي</option>
+        <option value="Independent">مستقل</option>
+      </select>
     </div>
 
     <button class="icon-btn" id="btn-refresh" title="تحديث" aria-label="تحديث"><i class="ti ti-refresh"></i></button>
@@ -289,13 +307,7 @@
     <div style="overflow-x:auto;">
       <table>
         <thead>
-          <tr>
-            <th>عدد المقالات</th>
-            <th id="th-date" style="cursor:pointer;user-select:none;">التاريخ <i class="ti ti-arrow-down" id="date-sort-icon" style="font-size:11px;"></i></th>
-            <th>العنوان</th>
-            <th>المصدر</th>
-            <th>الرابط</th>
-          </tr>
+          <tr id="thead-row"></tr>
         </thead>
         <tbody id="tbody"></tbody>
       </table>
@@ -315,6 +327,16 @@
   let dateSortOrder = 'desc';
   let loadedOnce = false;
 
+  var CATEGORIES = [
+    { key: 'updates', label: 'أبرز المستجدات الانتخابية' },
+    { key: 'senate',  label: 'المرشحون لمجلس الشيوخ' },
+    { key: 'house',   label: 'مجلس النواب' }
+  ];
+  var CATEGORY_LABEL = {};
+  CATEGORIES.forEach(function(c){ CATEGORY_LABEL[c.key] = c.label; });
+
+  var SENATE_STATES = ['Alaska','Georgia','Iowa','Maine','Michigan','New Hampshire','North Carolina','Ohio','Texas'];
+
   var VERIFY_LEVELS = [
     { key: 1, label: 'مقال واحد', bg: '#EFEBE6', color: '#6E6259', argb: 'FFEFEBE6', font: 'FF6E6259' },
     { key: 2, label: 'مقالان', bg: '#FBF1DC', color: '#7A5F00', argb: 'FFFBF1DC', font: 'FF7A5F00' },
@@ -326,6 +348,15 @@
     if(c >= 3) return VERIFY_LEVELS[2];
     if(c === 2) return VERIFY_LEVELS[1];
     return VERIFY_LEVELS[0];
+  }
+
+  function categoryOf(s){ return s.category || 'updates'; }
+
+  function personLine(s){
+    var cat = categoryOf(s);
+    if(cat === 'updates' || !s.person) return '';
+    var name = cat === 'house' ? 'Rep. ' + s.person : s.person;
+    return [name, s.state, s.party].filter(Boolean).join(' | ');
   }
 
   function escapeHtml(s){
@@ -390,14 +421,29 @@
 
   var WEEKS = buildWeeks();
 
-  (function fillWeekSelect(){
-    var sel = document.getElementById('f-week');
-    var opts = ['<option value="">كل الأسابيع</option>'];
-    WEEKS.forEach(function(w, i){
-      opts.push('<option value="'+i+'">'+w.label+'</option>');
-    });
-    sel.innerHTML = opts.join('');
+  (function fillSelects(){
+    var cat = ['<option value="">كل التصنيفات</option>'];
+    CATEGORIES.forEach(function(c){ cat.push('<option value="'+c.key+'">'+c.label+'</option>'); });
+    document.getElementById('f-category').innerHTML = cat.join('');
+
+    var wk = ['<option value="">كل الأسابيع</option>'];
+    WEEKS.forEach(function(w, i){ wk.push('<option value="'+i+'">'+w.label+'</option>'); });
+    document.getElementById('f-week').innerHTML = wk.join('');
+
+    var st = ['<option value="">كل الولايات</option>'];
+    SENATE_STATES.forEach(function(s){ st.push('<option value="'+s+'">'+s+'</option>'); });
+    document.getElementById('f-state').innerHTML = st.join('');
   })();
+
+  function selectedCategory(){ return document.getElementById('f-category').value; }
+
+  function syncFilterVisibility(){
+    var cat = selectedCategory();
+    document.getElementById('field-state').classList.toggle('hidden', cat !== 'senate');
+    document.getElementById('field-party').classList.toggle('hidden', cat !== 'house');
+    if(cat !== 'senate') document.getElementById('f-state').value = '';
+    if(cat !== 'house') document.getElementById('f-party').value = '';
+  }
 
   function showEmpty(html){
     var el = document.getElementById('empty-msg');
@@ -412,7 +458,7 @@
     while(true){
       const { data, error } = await sb
         .from('election_stories')
-        .select('id,story_date,title,question,source,link,published_at,source_count,updated_at,election_articles(id,title,source,link,published_at)')
+        .select('id,story_date,title,category,person,state,party,source,link,published_at,source_count,updated_at,election_articles(id,title,source,link,published_at)')
         .order('published_at', { ascending: false })
         .range(from, from + size - 1);
       if(error){
@@ -435,13 +481,18 @@
     render();
   }
 
-  function getFiltered(){
+  function filterRows(cat){
     var weekIdx = document.getElementById('f-week').value;
+    var state = document.getElementById('f-state').value;
+    var party = document.getElementById('f-party').value;
     var rows = stories.filter(function(s){
+      if(cat && categoryOf(s) !== cat) return false;
       if(weekIdx !== ''){
         var w = WEEKS[Number(weekIdx)];
         if(!(s.story_date >= w.start && s.story_date <= w.end)) return false;
       }
+      if(state && s.state !== state) return false;
+      if(party && s.party !== party) return false;
       return true;
     });
     rows.sort(function(x, y){
@@ -452,21 +503,37 @@
     return rows;
   }
 
+  function getFiltered(){ return filterRows(selectedCategory()); }
+
   function renderStats(rows){
+    var cat = selectedCategory();
+    var heroLabel = cat ? CATEGORY_LABEL[cat] : 'إجمالي القضايا';
     document.getElementById('stats-hero').innerHTML =
-      '<i class="ti ti-chart-bar"></i><div><div class="n">'+rows.length+'</div><div class="l">إجمالي القضايا</div></div>';
+      '<i class="ti ti-chart-bar"></i><div><div class="n">'+rows.length+'</div><div class="l">'+heroLabel+'</div></div>';
 
-    var counts = [0, 0, 0];
-    rows.forEach(function(s){ counts[verifyLevel(s.source_count).key - 1]++; });
-
-    document.getElementById('stats').innerHTML = VERIFY_LEVELS.map(function(v, i){
-      return '<div class="stat"><div class="n" style="color:'+v.color+';">'+counts[i]+'</div><div class="l">'+v.label+'</div></div>';
+    var counts = {};
+    rows.forEach(function(s){ var c = categoryOf(s); counts[c] = (counts[c] || 0) + 1; });
+    document.getElementById('stats').innerHTML = CATEGORIES.map(function(c){
+      return '<div class="stat"><div class="n">'+(counts[c.key] || 0)+'</div><div class="l">'+c.label+'</div></div>';
     }).join('');
 
     var latest = stories.reduce(function(m, s){ return (s.updated_at || '') > m ? s.updated_at : m; }, '');
     document.getElementById('last-update').innerHTML = latest
       ? '<i class="ti ti-clock"></i>آخر تحديث للبيانات: ' + formatRiyadh(latest)
       : '';
+  }
+
+  function renderHead(){
+    var showCat = !selectedCategory();
+    document.getElementById('thead-row').innerHTML =
+      '<th>عدد المقالات</th>' +
+      '<th id="th-date" style="cursor:pointer;user-select:none;">التاريخ <i class="ti '+(dateSortOrder === 'desc' ? 'ti-arrow-down' : 'ti-arrow-up')+'" style="font-size:11px;"></i></th>' +
+      (showCat ? '<th>التصنيف</th>' : '') +
+      '<th>العنوان</th><th>المصدر</th><th>الرابط</th>';
+    document.getElementById('th-date').onclick = function(){
+      dateSortOrder = dateSortOrder === 'desc' ? 'asc' : 'desc';
+      render();
+    };
   }
 
   function closeAllPopovers(){
@@ -489,17 +556,19 @@
 
   function renderTable(rows){
     var tbody = document.getElementById('tbody');
+    var showCat = !selectedCategory();
     if(!rows.length){
       tbody.innerHTML = '';
       showEmpty(loadedOnce && stories.length
-        ? '<i class="ti ti-inbox"></i>لا توجد مقالات في هذا الأسبوع، يُرجى اختيار أسبوع آخر'
-        : '<i class="ti ti-inbox"></i>لا توجد مقالات بعد، تُحدَّث البيانات تلقائيًا كل ساعتين');
+        ? '<i class="ti ti-inbox"></i>لا توجد مقالات مطابقة، يُرجى تجربة فلتر آخر'
+        : '<i class="ti ti-inbox"></i>لا توجد مقالات بعد، تُحدَّث البيانات تلقائيًا كل أربع ساعات');
       return;
     }
     document.getElementById('empty-msg').style.display = 'none';
 
     tbody.innerHTML = rows.map(function(s){
       var v = verifyLevel(s.source_count);
+      var person = personLine(s);
       var items = s.articles.map(function(a){
         return '<div class="src-item">'+
           '<div class="src-row"><span class="src-name">'+escapeHtml(a.source)+'</span><span class="src-time">'+formatRiyadh(a.published_at)+'</span></div>'+
@@ -516,8 +585,9 @@
           '</div>'+
         '</td>'+
         '<td class="date-cell">'+formatDateDisplay(s.story_date)+'</td>'+
+        (showCat ? '<td class="cat-cell">'+escapeHtml(CATEGORY_LABEL[categoryOf(s)])+'</td>' : '')+
         '<td class="title-cell"><div class="title-text" dir="auto">'+escapeHtml(s.title)+'</div>'+
-          (s.question ? '<div class="question-text"><b>القضية:</b> '+escapeHtml(s.question)+'</div>' : '')+'</td>'+
+          (person ? '<div class="person-text">'+escapeHtml(person)+'</div>' : '')+'</td>'+
         '<td class="source-cell">'+escapeHtml(s.source)+'</td>'+
         '<td><a class="article-link" href="'+escapeHtml(s.link)+'" target="_blank" rel="noopener"><i class="ti ti-external-link"></i>فتح الرابط</a></td>'+
       '</tr>';
@@ -541,15 +611,14 @@
   function render(){
     var rows = getFiltered();
     renderStats(rows);
+    renderHead();
     renderTable(rows);
   }
 
-  document.getElementById('th-date').onclick = function(){
-    dateSortOrder = dateSortOrder === 'desc' ? 'asc' : 'desc';
-    document.getElementById('date-sort-icon').className = dateSortOrder === 'desc' ? 'ti ti-arrow-down' : 'ti ti-arrow-up';
-    render();
-  };
+  document.getElementById('f-category').onchange = function(){ syncFilterVisibility(); render(); };
   document.getElementById('f-week').onchange = render;
+  document.getElementById('f-state').onchange = render;
+  document.getElementById('f-party').onchange = render;
   document.getElementById('btn-refresh').onclick = loadStories;
 
   document.getElementById('btn-export').onclick = function(e){
@@ -560,27 +629,40 @@
     pop.style.display = isOpen ? 'none' : 'block';
   };
 
-  function sourcesList(s){
-    var seen = {};
-    return s.articles.map(function(a){ return a.source; }).filter(function(n){
-      if(seen[n]) return false;
-      seen[n] = true;
-      return true;
-    }).join('، ');
-  }
-
   function articlesList(s){
     return s.articles.map(function(a){ return a.source + ' - ' + a.title; }).join('\n');
   }
 
-  document.getElementById('export-excel').onclick = async function(){
-    var rows = getFiltered();
-    var headers = ['عدد المقالات','التاريخ','العنوان','القضية','المصدر','الرابط','مقالات القضية'];
-    var widths = [14, 13, 50, 45, 24, 36, 70];
+  function sheetSpec(cat){
+    if(cat === 'senate'){
+      return {
+        headers: ['عدد المقالات','التاريخ','العنوان','Candidate','State','Party','المصدر','الرابط','مقالات القضية'],
+        widths: [14, 13, 50, 20, 16, 13, 24, 36, 70],
+        row: function(s){ return [verifyLevel(s.source_count).label, formatDateDisplay(s.story_date), s.title, s.person || '', s.state || '', s.party || '', s.source, s.link, articlesList(s)]; },
+        linkCol: 8
+      };
+    }
+    if(cat === 'house'){
+      return {
+        headers: ['عدد المقالات','التاريخ','العنوان','Representative','State','Party','المصدر','الرابط','مقالات القضية'],
+        widths: [14, 13, 50, 22, 16, 13, 24, 36, 70],
+        row: function(s){ return [verifyLevel(s.source_count).label, formatDateDisplay(s.story_date), s.title, s.person ? 'Rep. ' + s.person : '', s.state || '', s.party || '', s.source, s.link, articlesList(s)]; },
+        linkCol: 8
+      };
+    }
+    return {
+      headers: ['عدد المقالات','التاريخ','العنوان','المصدر','الرابط','مقالات القضية'],
+      widths: [14, 13, 55, 24, 36, 70],
+      row: function(s){ return [verifyLevel(s.source_count).label, formatDateDisplay(s.story_date), s.title, s.source, s.link, articlesList(s)]; },
+      linkCol: 5
+    };
+  }
 
-    var wb = new ExcelJS.Workbook();
-    var ws = wb.addWorksheet('انتخابات 2026', { views: [{ rightToLeft: true, state: 'frozen', ySplit: 1 }] });
-    ws.columns = headers.map(function(h, i){ return { header: h, key: h, width: widths[i] }; });
+  function addSheet(wb, cat, rows){
+    var spec = sheetSpec(cat);
+    var name = CATEGORY_LABEL[cat].slice(0, 31);
+    var ws = wb.addWorksheet(name, { views: [{ rightToLeft: true, state: 'frozen', ySplit: 1 }] });
+    ws.columns = spec.headers.map(function(h, i){ return { header: h, key: 'c' + i, width: spec.widths[i] }; });
 
     var headerRow = ws.getRow(1);
     headerRow.eachCell(function(cell){
@@ -592,7 +674,7 @@
 
     rows.forEach(function(s, idx){
       var v = verifyLevel(s.source_count);
-      var row = ws.addRow([v.label, formatDateDisplay(s.story_date), s.title, s.question || '', s.source, s.link, articlesList(s)]);
+      var row = ws.addRow(spec.row(s));
       row.eachCell(function(cell){
         cell.alignment = { horizontal: 'right', vertical: 'middle', wrapText: true };
         cell.font = { name: 'Arial', size: 10.5 };
@@ -605,17 +687,30 @@
       vc.font = { name: 'Arial', size: 10.5, bold: true, color: { argb: v.font } };
       vc.alignment = { horizontal: 'center', vertical: 'middle' };
       if(s.link){
-        row.getCell(6).value = { text: s.link, hyperlink: s.link };
-        row.getCell(6).font = { name: 'Arial', size: 10, color: { argb: 'FF286140' }, underline: true };
+        var lc = row.getCell(spec.linkCol);
+        lc.value = { text: s.link, hyperlink: s.link };
+        lc.font = { name: 'Arial', size: 10, color: { argb: 'FF286140' }, underline: true };
       }
     });
+  }
 
+  document.getElementById('export-excel').onclick = async function(){
+    var cat = selectedCategory();
+    var wb = new ExcelJS.Workbook();
+    var fileName;
+    if(cat){
+      addSheet(wb, cat, filterRows(cat));
+      fileName = 'عين - ' + CATEGORY_LABEL[cat] + '.xlsx';
+    } else {
+      CATEGORIES.forEach(function(c){ addSheet(wb, c.key, filterRows(c.key)); });
+      fileName = 'عين - انتخابات 2026.xlsx';
+    }
     var buffer = await wb.xlsx.writeBuffer();
     var blob = new Blob([buffer], { type: 'application/octet-stream' });
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a');
     a.href = url;
-    a.download = 'عين-انتخابات-2026.xlsx';
+    a.download = fileName;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -624,27 +719,30 @@
   };
 
   document.getElementById('export-pdf').onclick = function(){
+    var cat = selectedCategory();
     var rows = getFiltered();
     var weekIdx = document.getElementById('f-week').value;
     var weekLabel = weekIdx !== '' ? WEEKS[Number(weekIdx)].label : 'كل الأسابيع';
+    var catLabel = cat ? CATEGORY_LABEL[cat] : 'كل التصنيفات';
     var exportDate = formatDateDisplay(todayISO());
 
-    var counts = [0, 0, 0];
-    rows.forEach(function(s){ counts[verifyLevel(s.source_count).key - 1]++; });
-
+    var counts = {};
+    rows.forEach(function(s){ var c = categoryOf(s); counts[c] = (counts[c] || 0) + 1; });
     var statCards = '<div class="pdf-stat total"><div class="n">'+rows.length+'</div><div class="l">إجمالي القضايا</div></div>' +
-      VERIFY_LEVELS.map(function(v, i){
-        return '<div class="pdf-stat" style="background:'+v.bg+';"><div class="n" style="color:'+v.color+';">'+counts[i]+'</div><div class="l" style="color:'+v.color+';">'+v.label+'</div></div>';
+      CATEGORIES.map(function(c){
+        return '<div class="pdf-stat"><div class="n">'+(counts[c.key] || 0)+'</div><div class="l">'+c.label+'</div></div>';
       }).join('');
 
+    var showCat = !cat;
     var tableRows = rows.map(function(s){
       var v = verifyLevel(s.source_count);
+      var person = personLine(s);
       return '<tr>'+
         '<td><span class="pdf-badge" style="background:'+v.bg+';color:'+v.color+';">'+v.label+'</span></td>'+
         '<td class="c-date">'+formatDateDisplay(s.story_date)+'</td>'+
-        '<td class="c-title"><div dir="auto">'+escapeHtml(s.title)+'</div>'+(s.question ? '<div class="c-q">القضية: '+escapeHtml(s.question)+'</div>' : '')+'</td>'+
+        (showCat ? '<td class="c-cat">'+escapeHtml(CATEGORY_LABEL[categoryOf(s)])+'</td>' : '')+
+        '<td class="c-title"><div dir="auto">'+escapeHtml(s.title)+'</div>'+(person ? '<div class="c-person">'+escapeHtml(person)+'</div>' : '')+'</td>'+
         '<td>'+escapeHtml(s.source)+'</td>'+
-        '<td class="c-srcs">'+escapeHtml(sourcesList(s))+'</td>'+
       '</tr>';
     }).join('');
 
@@ -672,18 +770,18 @@
       'th{background:#286140;color:#fff;padding:7px 6px;text-align:right;font-weight:700;}'+
       'td{padding:6px 6px;border-bottom:1px solid #E4DFD0;text-align:right;vertical-align:top;}'+
       'tbody tr:nth-child(even){background:#FAF9F6;}'+
-      '.c-date{white-space:nowrap;color:#707070;}'+
-      '.c-title{max-width:230px;font-weight:700;color:#2B2B29;}'+
-      '.c-srcs{font-size:9px;color:#6E6259;max-width:150px;}'+
-      '.c-q{font-size:9px;font-weight:400;color:#1B365D;margin-top:3px;direction:rtl;}'+
+      '.c-date,.c-cat{white-space:nowrap;color:#707070;}'+
+      '.c-title{max-width:260px;font-weight:700;color:#2B2B29;}'+
+      '.c-person{font-size:9px;font-weight:600;color:#5A5959;margin-top:3px;direction:ltr;text-align:right;}'+
       '.pdf-badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:9px;font-weight:700;white-space:nowrap;}'+
       '.footer-note{margin-top:14px;font-size:9px;color:#B0ACA0;text-align:center;}'+
       '</style></head><body>'+
       '<div class="cover">'+
         '<div class="logo">عين</div>'+
         '<div class="gold-line"></div>'+
-        '<div class="subtitle">انتخابات 2026 - مقالات تحليلية مختارة</div>'+
+        '<div class="subtitle">انتخابات 2026</div>'+
         '<div class="meta">'+
+          '<div><b>التصنيف:</b> '+escapeHtml(catLabel)+'</div>'+
           '<div><b>الأسبوع:</b> '+escapeHtml(weekLabel)+'</div>'+
           '<div><b>تاريخ التصدير:</b> '+escapeHtml(exportDate)+'</div>'+
         '</div>'+
@@ -691,7 +789,7 @@
       '<div class="page-head"><span class="brand">عين - انتخابات 2026</span><span class="date">تاريخ التصدير: '+escapeHtml(exportDate)+'</span></div>'+
       '<div class="pdf-stats">'+statCards+'</div>'+
       '<table><thead><tr>'+
-        '<th>عدد المقالات</th><th>التاريخ</th><th>العنوان</th><th>المصدر</th><th>مصادر المقالات</th>'+
+        '<th>عدد المقالات</th><th>التاريخ</th>'+(showCat ? '<th>التصنيف</th>' : '')+'<th>العنوان</th><th>المصدر</th>'+
       '</tr></thead><tbody>'+tableRows+'</tbody></table>'+
       '<div class="footer-note">تم إنشاء هذا التقرير تلقائيًا من منصة عين</div>'+
       '</body></html>';
