@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
 """
-Ayn - US Elections 2026: selected analytical articles.
+Ayn - US Elections 2026 monitor. Three categories:
+  updates : أبرز المستجدات الانتخابية  - key analysis, developments, statements, positions and
+            campaign promises, with priority for oil, energy and the region's economy.
+  senate  : المرشحون لمجلس الشيوخ     - articles directly about the tracked swing-state candidates.
+  house   : مجلس النواب              - notable statements by House members on Iran.
 
 Every run (every 4 hours):
-  1. Search the approved sources (sources.json) with the keywords (keywords.json)
-     via Google News RSS and the sources' own RSS feeds.        (Check 1: keywords)
-  2. Triage (Claude Haiku): keep only items that may be analytical pieces about US elections.
-  3. Final selection (Claude Sonnet): score analytical value, keep only strong pieces
-     (about 5-10 a day), and link each to an existing issue if it analyzes the same issue.
-  4. Save to Supabase. Each issue's count grows as more articles analyze it.
+  1. Search the approved sources via Google News RSS and the sources' own RSS feeds
+     (election terms, election + energy, candidate names, House + Iran).
+  2. Triage by title (Claude Haiku).
+  3. Final selection (Claude Sonnet): category, score, person, and issue grouping.
+  4. Save to Supabase. Each issue's count grows as more articles cover it.
 
 Environment variables (GitHub Secrets):
   SUPABASE_URL, SUPABASE_SERVICE_KEY, ANTHROPIC_API_KEY
@@ -42,19 +45,21 @@ HEADERS = {
     "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
                   "(KHTML, like Gecko) Chrome/124.0 Safari/537.36"
 }
+CATEGORIES = ("updates", "senate", "house")
 BATCH_SIZE = 20          # candidates per final-selection call
 TRIAGE_BATCH = 50        # titles per triage call
 TRIAGE_WORKERS = 6       # parallel triage calls
 TIME_BUDGET_MIN = 45     # stop AI work after this many minutes; the rest waits for the next run
 MATCH_DAYS = 7           # compare new items with issues from the last 7 days
 MAX_EXISTING = 400       # max existing issues sent to Claude per call
-MAX_CANDIDATES = 8000    # safety cap per run
+MAX_CANDIDATES = 10000   # safety cap per run
 GOOGLE_PAUSE = 1.0       # seconds between Google News requests
 GOOGLE_QUERY_LEN = 80    # short OR-groups: long queries make Google ignore site:
 SKIP_TITLE_RE = re.compile(
-    r"^\s*(watch|video|live|listen|photos?|exclusive|breaking)\s*[:|]|live updates|week in politics|"
-    r"in brief|toplines|cross-tabs|primary results|election results|voter guide|what to know|countdown|"
-    r"newsletter|podcast|\bpoll finds\b", re.I)
+    r"^\s*(watch|video|live|listen|photos?)\s*[:|]|live updates|week in politics|"
+    r"in brief|toplines|cross-tabs|voter guide|countdown|newsletter|podcast", re.I)
+HOUSE_RE = re.compile(r"\biran", re.I)
+HOUSE_CTX_RE = re.compile(r"\b(rep\.|congress\w*|lawmakers?|house)\b", re.I)
 
 
 def log(*args):
@@ -218,29 +223,45 @@ def fetch_rss(url, source_name):
     return out
 
 
-
 # ------------------------------------------------------------------ Claude
 
-TRIAGE_PROMPT = """You triage items for a page that lists only ANALYTICAL articles about the 2026 United States elections.
-
-For each candidate, decide whether it could be an analytical piece (analysis, opinion or op-ed, explainer, or long-form feature built around an argument) that is primarily about US elections: the 2026 midterms, specific races, campaigns and candidates, voters and polling trends, voting rules, election administration, redistricting, or the 2028 race.
-
-Answer NO for: straight news reports and breaking news, poll toplines or cross-tabs, forecast or data pages, results pages, voter guides, race trackers, live blogs, videos, podcasts, newsletters, roundups, digests and "in brief" items, non-English items, and anything not primarily about US elections.
-When unsure whether a relevant piece is analysis, answer YES; a stricter editor reads the full content next.
-
-Return JSON only: {"keep":[0,3,7]}"""
+def candidates_text(cands):
+    return "\n".join(f"- {c['name']} ({c['state']}, {c['party']})" for c in cands)
 
 
-SYSTEM_PROMPT = """You are the final editor of a page listing only the best ANALYTICAL articles about the 2026 United States elections, read by senior policy analysts. The page shows roughly 5 to 10 articles per day across all sources, so be highly selective.
+def triage_prompt(cands):
+    return f"""You triage news items for a monitoring page about the 2026 United States elections, read by senior policy analysts in the Gulf region. The page has three categories:
+
+A. ELECTION UPDATES: analytical articles and notable developments, statements, positions and campaign promises that are directly about US elections (2026 midterms, races, campaigns, voters, polling trends, voting rules, redistricting, the 2028 race). Priority: oil, energy, gas prices, sanctions, Iran and Middle East policy, and issues that could affect the Gulf region's economy.
+B. SENATE CANDIDATES: articles directly about one of these tracked candidates (their campaign, statements, positions, promises, debates, ads, polls on their race, controversies):
+{candidates_text(cands)}
+C. HOUSE ON IRAN: notable statements or positions by members of the US House of Representatives about Iran (the war, negotiations, sanctions, war powers, oil).
+
+Keep an item if it could plausibly belong to A, B or C. Drop: items not about these subjects, items that only mention elections or a candidate in passing, videos, live blogs, podcasts, newsletters, roundups and digests, and non-English items. When unsure about a relevant item, keep it; a stricter editor reviews next.
+
+Return JSON only: {{"keep":[0,3,7]}}"""
+
+
+def editor_prompt(cands):
+    return f"""You are the final editor of a monitoring page about the 2026 United States elections, read by senior policy analysts in the Gulf region. Precision matters more than volume. Assign each candidate to at most one category, or reject it.
+
+CATEGORIES
+- "senate": the article is directly about one of these tracked Senate candidates (their campaign, statements, positions, promises, debates, ads, fundraising, polls on their race, controversies). A passing mention is not enough.
+{candidates_text(cands)}
+- "house": the article reports a notable statement or position by a member of the US House of Representatives about Iran (the war, negotiations, sanctions, war powers, oil). Senators do not belong here.
+- "updates": strictly about US elections. Either a strong analytical piece, or a notable development, statement, position or campaign promise with clear significance for the elections. Give priority to oil, energy, gas prices, sanctions, Iran and Middle East policy, and issues that could affect the Gulf region's economy. Routine campaign news, horse-race chatter, roundups, digests, race lists, poll toplines, partisan attack lines and celebrity angles do not qualify.
+If an item fits "senate" or "house", prefer that category over "updates".
 
 For every CANDIDATE return:
-1. analysis: true only for a genuine analytical piece (analysis, opinion or op-ed, explainer, or long-form feature built around an argument). False for news reports, roundups, digests, "in brief" items, race lists or "races to watch", trackers, poll toplines, forecast pages, guides, videos, podcasts and non-English items.
-2. score (1-10): analytical value to a policy analyst. Weigh depth of argument, use of evidence and data, originality of insight, significance for election outcomes or the direction of US politics, and credibility. 9-10 exceptional and essential; 8 strong and clearly worth reading; 6-7 decent but not essential; 5 or below thin. Partisan attack pieces, pieces built on one quote, and celebrity or human-interest angles score 5 or below.
-3. match: if the piece clearly analyzes the same specific issue or question as one of the EXISTING ISSUES, return that id. Different angles on the same specific question count as the same issue (for example, several analyses of why Republican candidates are distancing themselves from Trump). Sharing a word or a broad theme ("races", "polls", "the midterms", "Trump's popularity") is NOT enough. If the title does not make the specific question clear, return null. When in doubt, return null.
-4. group: if match is null, give candidates in this batch that clearly analyze the same specific issue the same short label (for example "g1"); otherwise null. Same strict rule.
+1. category: "updates", "senate", "house", or null to reject.
+2. score (1-10): value to a policy analyst. 9-10 essential; 8 strong; 7 useful and clearly relevant; 6 or below marginal. Items on oil, energy or the Gulf economy that are directly tied to the elections deserve extra weight.
+3. person: for "senate", the candidate's full name exactly as written in the list above; for "house", the House member's full name (without "Rep."); otherwise null.
+4. state and party: for "house" only, the member's state (full name) and party ("Republican", "Democrat" or "Independent"); otherwise null.
+5. match: the id of an EXISTING ISSUE in the SAME category only if the item covers the same specific story or question (for senate, also the same candidate). Sharing a word or a broad theme is not enough. If the title does not make it clear, null.
+6. group: if match is null, the same short label (e.g. "g1") for candidates in this batch that cover the same specific story in the same category; otherwise null.
 
-Judge from the title, source and snippet. Return JSON only, no prose, in exactly this shape:
-{"results":[{"i":0,"analysis":true,"score":8,"match":null,"group":null}]}
+Judge from the title, source and snippet. A note "[found via candidate search]" means the article text mentions a tracked candidate somewhere; decide from the title whether it is directly about them. Return JSON only, no prose:
+{{"results":[{{"i":0,"category":"senate","score":8,"person":"Ken Paxton","state":null,"party":null,"match":null,"group":null}}]}}
 Include one entry for every candidate index."""
 
 
@@ -267,12 +288,14 @@ def candidate_lines(batch):
         line = f"[{i}] {it['source']} | {it['title']}"
         if it.get("snippet"):
             line += f" | {it['snippet'][:300]}"
+        if it.get("via") == "senate":
+            line += " [found via candidate search]"
         lines.append(line)
     return "\n".join(lines)
 
 
-def triage(client, batch):
-    data = ask_claude(client, TRIAGE_MODEL, TRIAGE_PROMPT,
+def triage(client, system, batch):
+    data = ask_claude(client, TRIAGE_MODEL, system,
                       "CANDIDATES:\n" + candidate_lines(batch), max_tokens=1024)
     if data is None:
         return None
@@ -285,14 +308,15 @@ def triage(client, batch):
     return keep
 
 
-def judge(client, batch, stories):
-    existing = "\n".join(f"{s['id']} | {s['title']}" for s in stories[:MAX_EXISTING]) or "(none)"
+def judge(client, system, batch, stories):
+    existing = "\n".join(f"{s['id']} | {s.get('category') or 'updates'} | {s['title']}"
+                         for s in stories[:MAX_EXISTING]) or "(none)"
     content = [
-        {"type": "text", "text": f"EXISTING ISSUES (id | title of first article):\n{existing}",
+        {"type": "text", "text": f"EXISTING ISSUES (id | category | title of first article):\n{existing}",
          "cache_control": {"type": "ephemeral"}},
         {"type": "text", "text": f"CANDIDATES:\n{candidate_lines(batch)}"},
     ]
-    data = ask_claude(client, MODEL, SYSTEM_PROMPT, content)
+    data = ask_claude(client, MODEL, system, content, max_tokens=5000)
     if data is None:
         return None
     return {int(r["i"]): r for r in data.get("results", []) if "i" in r}
@@ -333,7 +357,7 @@ def refresh_story(story_id):
     }, prefer="return=minimal")
 
 
-def create_story(arts):
+def create_story(arts, meta):
     arts = sorted(arts, key=lambda a: a["published"])
     first = arts[0]
     row = sb("POST", "election_stories", body={
@@ -343,6 +367,10 @@ def create_story(arts):
         "published_at": iso(first["published"]),
         "story_date": riyadh_date(first["published"]),
         "source_count": len(arts),
+        "category": meta["category"],
+        "person": meta.get("person"),
+        "state": meta.get("state"),
+        "party": meta.get("party"),
         "updated_at": iso(datetime.now(UTC)),
     }, prefer="return=representation")[0]
     insert_articles(row["id"], arts)
@@ -359,27 +387,57 @@ def mark_seen(keys):
 # ------------------------------------------------------------------ main
 
 START = datetime.now(UTC)
-MIN_SCORE = 8
-DAILY_CAP = 10
+
+
+def to_float(v):
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def to_int(v):
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return None
+
+
+def clean(v):
+    v = (v or "").strip() if isinstance(v, str) else ""
+    return v or None
 
 
 def main():
-    global MIN_SCORE, DAILY_CAP
     kw = load_json("keywords.json")
-    MIN_SCORE = float(kw.get("min_score", MIN_SCORE))
-    DAILY_CAP = int(kw.get("daily_cap", DAILY_CAP))
     sources = load_json("sources.json")
     src_idx = build_source_index(sources)
-    terms = [t for t in kw.get("search_terms", []) + kw.get("names", []) if t.strip()]
-    kw_re = keyword_regex(terms)
-    google_chunks = term_chunks(terms, max_len=GOOGLE_QUERY_LEN)
+    cands = kw.get("senate_candidates", [])
+    cand_by_name = {c["name"].lower(): c for c in cands}
+    rules = {
+        "updates": (float(kw.get("min_score", 8)), int(kw.get("daily_cap", 10))),
+        "senate": (float(kw.get("senate_min_score", 7)), int(kw.get("senate_daily_cap", 40))),
+        "house": (float(kw.get("house_min_score", 7)), int(kw.get("house_daily_cap", 15))),
+    }
+
+    terms = [t for t in kw.get("search_terms", []) if t.strip()]
+    names = [c["name"] for c in cands] + [t for t in kw.get("names", []) if t.strip()]
+    election_re = keyword_regex(terms)
+    names_re = keyword_regex(names) if names else None
+
+    queries = [(q, "updates", "all") for q in term_chunks(terms, max_len=GOOGLE_QUERY_LEN)]
+    if kw.get("energy_query"):
+        queries.append((kw["energy_query"], "updates", "all"))
+    if names:
+        queries += [(q, "senate", "media") for q in term_chunks(names, max_len=GOOGLE_QUERY_LEN)]
+    if kw.get("house_query"):
+        queries.append((kw["house_query"], "house", "media"))
 
     now = datetime.now(UTC)
     backfill = datetime.fromisoformat(kw["backfill_start"]).replace(tzinfo=RIYADH).astimezone(UTC)
     since = max(backfill, now - timedelta(days=int(kw.get("lookback_days", 5))))
     days = max(1, int((now - since).total_seconds() // 86400) + 1)
-    log(f"Models: triage {TRIAGE_MODEL}, final {MODEL} | min score {MIN_SCORE}, "
-        f"daily cap {DAILY_CAP} | window starts {iso(since)}")
+    log(f"Models: triage {TRIAGE_MODEL}, final {MODEL} | rules {rules} | window starts {iso(since)}")
 
     seen = {r["key"] for r in sb_all("election_seen", {
         "select": "key", "created_at": f"gte.{iso(now - timedelta(days=30))}"})}
@@ -392,27 +450,43 @@ def main():
         for url in s.get("rss", []):
             try:
                 items = fetch_rss(url, s["name"])
-                items = [it for it in items if kw_re.search(f"{it['title']} {it['snippet']}")]
-                raw.extend(items)
-                log(f"RSS  {s['name']}: {len(items)} matching")
+                keep = []
+                for it in items:
+                    text = f"{it['title']} {it['snippet']}"
+                    if names_re and names_re.search(text):
+                        it["via"] = "senate"
+                    elif HOUSE_RE.search(text) and HOUSE_CTX_RE.search(text):
+                        it["via"] = "house"
+                    elif election_re.search(text):
+                        it["via"] = "updates"
+                    else:
+                        continue
+                    keep.append(it)
+                raw.extend(keep)
+                log(f"RSS  {s['name']}: {len(keep)} matching")
             except Exception as ex:  # noqa: BLE001
                 log(f"RSS  {s['name']} failed: {ex}")
 
     for s in sources:
+        is_media = s.get("type", "media") == "media"
         for domain in s["domains"]:
-            got = on_site = 0
-            for chunk in google_chunks:
+            got = 0
+            for q, via, scope in queries:
+                if scope == "media" and not is_media:
+                    continue
                 try:
-                    items = fetch_google(domain, chunk, days)
+                    items = fetch_google(domain, q, days)
+                    for it in items:
+                        it["via"] = via
                     raw.extend(items)
                     got += len(items)
-                    on_site += sum(1 for it in items if source_for(it["host"], src_idx) == s["name"])
                 except Exception as ex:  # noqa: BLE001
                     log(f"GNEWS {domain} failed: {ex}")
                 time.sleep(GOOGLE_PAUSE)
-            log(f"GNEWS {domain}: {got} results, {on_site} from this source")
+            log(f"GNEWS {domain}: {got} results")
 
     candidates = {}
+    priority = {"senate": 3, "house": 2, "updates": 1}
     drops = {"empty_or_video": 0, "not_approved_source": 0, "outside_window": 0, "already_processed": 0}
     for it in raw:
         if not it.get("title") or not it.get("link") or SKIP_TITLE_RE.search(it["title"]):
@@ -433,99 +507,114 @@ def main():
             continue
         it["key"] = key
         prev = candidates.get(key)
-        if prev is None or (prev["origin"] == "google" and it["origin"] != "google"):
-            if prev and not it.get("snippet"):
-                it["snippet"] = prev.get("snippet", "")
+        if prev is None:
+            candidates[key] = it
+            continue
+        if priority.get(it.get("via"), 0) > priority.get(prev.get("via"), 0):
+            prev["via"] = it["via"]
+        if prev["origin"] == "google" and it["origin"] != "google":
+            it["via"] = prev["via"]
             candidates[key] = it
 
     log(f"Fetched {len(raw)} raw items | dropped: {drops}")
     items = sorted(candidates.values(), key=lambda x: x["published"])[:MAX_CANDIDATES]
-    log(f"New candidates after Check 1: {len(items)}")
+    log(f"New candidates: {len(items)}")
     if not items:
         log("Nothing new.")
         return
 
     client = anthropic.Anthropic()
     deadline = START + timedelta(minutes=TIME_BUDGET_MIN)
+    t_prompt, e_prompt = triage_prompt(cands), editor_prompt(cands)
 
     batches = [items[b:b + TRIAGE_BATCH] for b in range(0, len(items), TRIAGE_BATCH)]
     shortlisted = []
     with ThreadPoolExecutor(max_workers=TRIAGE_WORKERS) as pool:
-        for batch, keep in zip(batches, pool.map(lambda bt: triage(client, bt), batches)):
+        for batch, keep in zip(batches, pool.map(lambda bt: triage(client, t_prompt, bt), batches)):
             if keep is None:
                 continue
             shortlisted.extend(it for i, it in enumerate(batch) if i in keep)
             mark_seen([it["key"] for i, it in enumerate(batch) if i not in keep])
-    log(f"Shortlisted as possible analysis: {len(shortlisted)}")
+    log(f"Shortlisted: {len(shortlisted)}")
 
     stories = sb_all("election_stories", {
-        "select": "id,title,updated_at",
+        "select": "id,title,category,updated_at",
         "updated_at": f"gte.{iso(now - timedelta(days=MATCH_DAYS))}",
         "order": "updated_at.desc",
     })
-    story_ids = {s["id"] for s in stories}
+    story_cat = {s["id"]: (s.get("category") or "updates") for s in stories}
     day_counts = {}
-    for r in sb_all("election_stories", {"select": "story_date",
+    for r in sb_all("election_stories", {"select": "story_date,category",
                                          "story_date": f"gte.{riyadh_date(since)}"}):
-        day_counts[r["story_date"]] = day_counts.get(r["story_date"], 0) + 1
+        k = (r.get("category") or "updates", r["story_date"])
+        day_counts[k] = day_counts.get(k, 0) + 1
     log(f"Existing issues in the last {MATCH_DAYS} days: {len(stories)}")
 
-    kept = created = attached = 0
+    totals = {c: [0, 0] for c in CATEGORIES}   # [new issues, added to existing]
     for b in range(0, len(shortlisted), BATCH_SIZE):
         if datetime.now(UTC) > deadline:
             log("Time budget reached; remaining shortlisted items wait for the next run")
             break
         batch = shortlisted[b:b + BATCH_SIZE]
-        results = judge(client, batch, stories)
+        results = judge(client, e_prompt, batch, stories)
         if results is None:
             log(f"Batch {b // BATCH_SIZE + 1}: skipped, will retry next run")
             continue
 
         groups, singles, matches = {}, [], {}
         for i, it in enumerate(batch):
-            r = results.get(i)
-            if not r or not r.get("analysis"):
+            r = results.get(i) or {}
+            cat = r.get("category")
+            if cat not in CATEGORIES:
                 continue
-            try:
-                score = float(r.get("score") or 0)
-            except (TypeError, ValueError):
-                score = 0
-            if score < MIN_SCORE:
+            score = to_float(r.get("score"))
+            min_score, cap = rules[cat]
+            if score < min_score:
                 continue
+            meta = {"category": cat}
+            if cat == "senate":
+                c = cand_by_name.get((clean(r.get("person")) or "").lower())
+                if not c:
+                    continue
+                meta.update(person=c["name"], state=c["state"], party=c["party"])
+            elif cat == "house":
+                person = clean(r.get("person"))
+                if not person:
+                    continue
+                meta.update(person=person, state=clean(r.get("state")), party=clean(r.get("party")))
             it["score"] = score
-            try:
-                match = int(r["match"]) if r.get("match") is not None else None
-            except (TypeError, ValueError):
-                match = None
-            if match in story_ids:
+
+            match = to_int(r.get("match"))
+            if match in story_cat and story_cat[match] == cat:
                 matches.setdefault(match, []).append(it)
-                kept += 1
                 continue
             day = riyadh_date(it["published"])
-            if day_counts.get(day, 0) >= DAILY_CAP and score < 9:
+            if day_counts.get((cat, day), 0) >= cap and (cat != "updates" or score < 9):
                 continue
-            kept += 1
             if r.get("group"):
-                groups.setdefault(str(r["group"]), []).append(it)
+                g = groups.setdefault(f"{cat}|{r['group']}|{meta.get('person')}", {"meta": meta, "arts": []})
+                g["arts"].append(it)
             else:
-                singles.append([it])
+                singles.append({"meta": meta, "arts": [it]})
 
         for sid, arts in matches.items():
             insert_articles(sid, arts)
             refresh_story(sid)
-            attached += len(arts)
+            totals[story_cat[sid]][1] += len(arts)
 
-        for arts in list(groups.values()) + singles:
-            row = create_story(arts)
-            created += 1
-            story_ids.add(row["id"])
-            stories.insert(0, {"id": row["id"], "title": row["title"]})
-            day_counts[row["story_date"]] = day_counts.get(row["story_date"], 0) + 1
+        for g in list(groups.values()) + singles:
+            row = create_story(g["arts"], g["meta"])
+            cat = g["meta"]["category"]
+            totals[cat][0] += 1
+            story_cat[row["id"]] = cat
+            stories.insert(0, {"id": row["id"], "title": row["title"], "category": cat})
+            k = (cat, row["story_date"])
+            day_counts[k] = day_counts.get(k, 0) + 1
 
         mark_seen([it["key"] for it in batch])
         log(f"Batch {b // BATCH_SIZE + 1}: {len(batch)} reviewed")
 
-    log(f"Done. Kept {kept} | new issues {created} | added to existing issues {attached}")
+    log("Done. " + " | ".join(f"{c}: {n} new issues, {a} added to existing" for c, (n, a) in totals.items()))
 
 
 if __name__ == "__main__":
